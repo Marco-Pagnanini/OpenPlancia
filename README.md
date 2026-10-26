@@ -1,6 +1,6 @@
 # Plancia
 
-Lavagna infinita per sviluppatori: panel (terminali Claude Code, markdown, architetture, codice) collegati da frecce che definiscono il contesto dell'agente. Specifica completa in [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
+Lavagna infinita per sviluppatori: panel (terminali Claude Code, markdown, architetture, codice) collegati da frecce che definiscono il contesto dell'agente. Specifica completa in [docs/MVP_SPEC.md](docs/MVP_SPEC.md); architettura del codice (diagrammi e mappa dei file) in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 > "Plancia" è un nome provvisorio. Non è un prodotto Anthropic.
 
