@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { TerminalPanel } from '@shared/types';
 import { defaultShell, findExecutable, type Env } from '../env/shellEnv';
@@ -161,6 +162,31 @@ export function findClaude(env: Env): Promise<string | null> {
 }
 
 /** `claude --version`, or null if it cannot be run. */
+/**
+ * Whether Claude Code saved a conversation for this session. A session started but never given a
+ * message has no transcript, and `--resume` of it fails ("No conversation found"). Transcripts
+ * are `<config>/projects/<project>/<sessionId>.jsonl`; the project folder name is Claude's own
+ * encoding of the path, so every project is checked. Unknown layout = assume it exists.
+ */
+export async function claudeSessionExists(sessionId: string, env: Env): Promise<boolean> {
+  const projects = join(env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'), 'projects');
+  let dirs: string[];
+  try {
+    dirs = await readdir(projects);
+  } catch {
+    return true;
+  }
+  const found = await Promise.all(
+    dirs.map((dir) =>
+      access(join(projects, dir, `${sessionId}.jsonl`)).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  );
+  return found.some(Boolean);
+}
+
 export function claudeVersion(claudePath: string, env: Env): Promise<string | null> {
   return new Promise((resolve) => {
     const { file, args } = claudeLaunch(claudePath, ['--version']);

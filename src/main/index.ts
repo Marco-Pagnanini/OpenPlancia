@@ -38,6 +38,7 @@ import { CodeService } from './code/CodeService';
 import { collectManifestEntries, ManifestTracker, renderManifest } from './claude/manifest';
 import {
   CLAUDE_INSTALL_URL,
+  claudeSessionExists,
   claudeVersion,
   findClaude,
   sessionStartCommand,
@@ -328,6 +329,7 @@ const terminals: TerminalService = new TerminalService({
   pty,
   env: ptyEnv,
   findClaude,
+  sessionExists: claudeSessionExists,
   onError: (id, code, message) => send(IpcChannels.terminalError, { id, code, message }),
   prepareClaude,
 });

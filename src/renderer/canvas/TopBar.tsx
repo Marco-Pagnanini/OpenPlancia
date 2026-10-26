@@ -1,5 +1,7 @@
-import { TerminalWindowIcon } from '@phosphor-icons/react';
+import { ArrowCounterClockwiseIcon, TerminalWindowIcon } from '@phosphor-icons/react';
+import type { TerminalPanel } from '@shared/types';
 import { Logo } from '../components/Logo';
+import { terminalRegistry } from '../panels/terminal/terminalRegistry';
 import { useTerminalStore } from '../stores/terminalStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 
@@ -19,6 +21,51 @@ function AgentsPill() {
       <TerminalWindowIcon size={14} className="text-ink-3" />
       {agents.length} {agents.length === 1 ? 'agente' : 'agenti'}
     </span>
+  );
+}
+
+/**
+ * After reopening a board every Claude panel waits for its own "Riprendi sessione": this starts
+ * them all at once, resuming the ones that have a session and starting the others fresh.
+ */
+function ResumeAll() {
+  const panels = useWorkspaceStore((s) => s.snapshot?.board.panels);
+  const waiting = (panels ?? []).filter(
+    (p): p is TerminalPanel =>
+      p.type === 'terminal' && p.mode === 'claude' && p.status === 'not-started',
+  );
+  if (waiting.length === 0) return null;
+  const resumable = waiting.filter((p) => p.claudeSessionId).length;
+  const resumeAll = () => {
+    const { start } = useTerminalStore.getState();
+    for (const panel of waiting) {
+      void start(panel.id, panel.claudeSessionId !== undefined, terminalRegistry.size(panel.id));
+    }
+  };
+  const fresh = waiting.length - resumable;
+  const label =
+    waiting.length > 1
+      ? `Riprendi tutti gli agenti (${waiting.length})`
+      : resumable === 1
+        ? 'Riprendi la sessione'
+        : "Avvia l'agente";
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const detail = [
+    resumable > 0 && `riprende ${count(resumable, 'conversazione', 'conversazioni')}`,
+    fresh > 0 && `avvia ${count(fresh, 'agente nuovo', 'agenti nuovi')} (non avevano una sessione)`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  return (
+    <button
+      type="button"
+      onClick={resumeAll}
+      title={`${detail.charAt(0).toUpperCase()}${detail.slice(1)}.`}
+      className="flex items-center gap-2 rounded-[10px] bg-ink px-3 py-[7px] text-[12.5px] font-medium text-on-light hover:bg-white active:translate-y-px"
+    >
+      <ArrowCounterClockwiseIcon size={14} />
+      {label}
+    </button>
   );
 }
 
@@ -50,6 +97,7 @@ export function TopBar() {
         </button>
       </div>
       <div className="pointer-events-auto flex items-center gap-2">
+        <ResumeAll />
         <AgentsPill />
       </div>
     </div>

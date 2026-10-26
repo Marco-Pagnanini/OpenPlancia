@@ -18,7 +18,10 @@ beforeEach(async () => {
 });
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
-async function setup({ claude = '/opt/bin/claude' as string | null } = {}) {
+async function setup({
+  claude = '/opt/bin/claude' as string | null,
+  saved = true,
+}: { claude?: string | null; saved?: boolean } = {}) {
   const workspace = new WorkspaceService({
     settingsFile: join(dir, 'settings.json'),
     onState: () => undefined,
@@ -39,6 +42,7 @@ async function setup({ claude = '/opt/bin/claude' as string | null } = {}) {
     findClaude: () => Promise.resolve(claude),
     onError: (id, code) => errors.push([id, code]),
     newSessionId: () => `00000000-0000-4000-8000-00000000000${++n}`,
+    sessionExists: () => Promise.resolve(saved),
   });
   await workspace.open(project);
   const terminal = (i = 0) =>
@@ -95,6 +99,21 @@ describe('TerminalService', () => {
     });
     expect(t.spawned[1]!.options).toMatchObject({ args: ['--resume', claudeSessionId], cols: 90 });
     expect(t.terminal().status).toBe('idle');
+    await t.workspace.close({ notify: false });
+  });
+
+  it('starts the same session afresh when Claude saved no conversation for it', async () => {
+    const t = await setup({ saved: false });
+    t.workspace.dispatch(create('claude'));
+    await vi.waitFor(() => expect(t.spawned).toHaveLength(1));
+    const { id, claudeSessionId } = t.terminal();
+    t.spawned[0]!.exit(0);
+    await t.terminals.start(id, { resume: true, cols: 90, rows: 20 });
+    const args = t.spawned[1]!.options.args;
+    expect(args).toContain('--session-id');
+    expect(args).toContain(claudeSessionId);
+    expect(args).not.toContain('--resume');
+    expect(t.terminal().claudeSessionId).toBe(claudeSessionId);
     await t.workspace.close({ notify: false });
   });
 
