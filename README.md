@@ -12,8 +12,8 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-199%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
-[![Stato](https://img.shields.io/badge/stato-MVP%20in%20sviluppo-F2994A?style=flat-square)](#%EF%B8%8F-roadmap)
+[![Tests](https://img.shields.io/badge/test-211%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
+[![Stato](https://img.shields.io/badge/stato-MVP%20completo-2EA44F?style=flat-square)](#%EF%B8%8F-roadmap)
 
 [Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
 
@@ -102,6 +102,15 @@ La freccia si anima quando Claude la usa. L'inspector mostra letture e scritture
 ### 📁 Cartelle intere in un solo panel
 
 Scegli una cartella (es. `docs/`): il panel mostra l'albero dei suoi file `.md`, con l'anteprima del file selezionato. Una freccia sola dà a Claude il contesto di tutta la cartella, e con la freccia di scrittura può anche **creare** file nuovi (un nuovo ADR, un piano). Nessuna lavagna piena di panel Markdown.
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+
+### 🧾 Il codice che cambia, sotto gli occhi
+
+Il panel **Codice** elenca i file che gli agenti modificano, il più recente in alto, con chi li ha toccati e quando. Selezionandone uno vedi il **diff rispetto all'ultimo commit** (o il file intero), in sola lettura, aggiornato in tempo reale. Puoi seguire tutti gli agenti o uno solo, e aprire a mano qualsiasi file del progetto.
 
 </td>
 </tr>
@@ -231,6 +240,7 @@ Poi **Apri cartella progetto**, premi <kbd>L</kbd> per una sessione Claude, <kbd
 | <kbd>M</kbd>                           | nuovo file Markdown o apri un esistente |
 | <kbd>F</kbd>                           | nuova cartella (albero dei file .md)    |
 | <kbd>A</kbd>                           | nuovo schema di architettura            |
+| <kbd>K</kbd>                           | nuovo panel Codice                      |
 | <kbd>0</kbd>                           | inquadra tutti i panel                  |
 | <kbd>Backspace</kbd> / <kbd>Canc</kbd> | elimina i panel o le frecce selezionati |
 | <kbd>Esc</kbd>                         | torna al puntatore                      |
@@ -268,6 +278,7 @@ Per provare senza toccare le proprie impostazioni: `PLANCIA_USER_DATA=/percorso 
 | File                | chokidar per le modifiche esterne · scritture atomiche                       |
 | Contratti           | TypeScript strict · zod a ogni confine (IPC, file, hook)                     |
 | Integrazione Claude | hook · server MCP locale · `--session-id` / `--resume`                       |
+| git                 | solo lettura (`git show HEAD:…`) per il diff del panel Codice                |
 
 Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella stessa: si può versionare con git o ignorare.
 
@@ -284,7 +295,8 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 - [x] Schermata iniziale con cartelle recenti
 - [x] **M6** · Panel Architettura: schemi in JSON validato che Claude legge e modifica, layout automatico, "Vedi JSON"
 - [x] **M6.5** · Panel Cartella: albero dei `.md` di una cartella, una freccia per tutta la cartella, Claude crea e modifica file
-- [ ] **M7** · Panel Codice: file e diff in sola lettura, aggiornati da quello che Claude modifica
+- [x] **M7** · Panel Codice: file modificati dagli agenti, diff con `HEAD` in sola lettura, in tempo reale
+- [ ] **Dopo l'MVP** · Multi-agente: frecce tra terminali Claude
 
 ## 🔒 Sicurezza
 
@@ -295,7 +307,7 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 
 ## ⚠️ Limiti noti
 
-- Le modifiche ai file fatte da Claude con `Bash` non si possono intercettare in modo affidabile: il blocco vale per `Write`, `Edit`, `MultiEdit` e `NotebookEdit`.
+- Le modifiche ai file fatte da Claude con `Bash` non si possono intercettare in modo affidabile: il blocco e il panel Codice valgono per `Write`, `Edit`, `MultiEdit` e `NotebookEdit`.
 - Con lo zoom della lavagna diverso dal 100% la selezione col mouse nei terminali può non coincidere col testo: usa la modalità focus.
 - Provato solo su macOS. Il pacchetto non è firmato.
 - Se `npm run dev` fallisce con `Error: Electron uninstall`, esegui `node node_modules/electron/install.js`.

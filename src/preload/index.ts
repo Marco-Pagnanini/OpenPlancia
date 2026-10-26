@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   IpcChannels,
   type ArchitectureChangedEvent,
+  type CodeFeedEntry,
   type ConnectionUse,
   type FolderFileChangedEvent,
   type FolderIndexEvent,
@@ -56,6 +57,14 @@ const api: PlanciaApi = {
       ipcRenderer.invoke(IpcChannels.markdownWrite, { id, content, baseVersion }),
     onChanged: (listener) => subscribe<MarkdownChangedEvent>(IpcChannels.markdownChanged, listener),
     undo: (id) => ipcRenderer.invoke(IpcChannels.markdownUndo, { id }),
+  },
+  code: {
+    feed: () => ipcRenderer.invoke(IpcChannels.codeFeed),
+    read: (path) => ipcRenderer.invoke(IpcChannels.codeRead, { path }),
+    watch: (id, path) => ipcRenderer.send(IpcChannels.codeWatch, { id, path }),
+    pick: (id) => ipcRenderer.invoke(IpcChannels.codePick, { id }),
+    onFeed: (listener) => subscribe<CodeFeedEntry[]>(IpcChannels.codeFeedChanged, listener),
+    onFileChanged: (listener) => subscribe<{ path: string }>(IpcChannels.codeFileChanged, listener),
   },
   folder: {
     create: (request) => ipcRenderer.invoke(IpcChannels.folderCreate, request),

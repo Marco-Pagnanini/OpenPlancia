@@ -12,6 +12,8 @@ import {
 import { formatArchitectureForClaude } from '@shared/architecture';
 import {
   architectureWriteSchema,
+  codeFileSchema,
+  codeWatchSchema,
   connectionHistorySchema,
   externalUrlSchema,
   folderCreateSchema,
@@ -32,6 +34,7 @@ import { ConnectionLog } from './access/ConnectionLog';
 import { PanelTools } from './access/panelTools';
 import { ActivityLog } from './activity/ActivityLog';
 import { ArchitectureService } from './architecture/ArchitectureService';
+import { CodeService } from './code/CodeService';
 import { collectManifestEntries, ManifestTracker, renderManifest } from './claude/manifest';
 import {
   CLAUDE_INSTALL_URL,
@@ -40,12 +43,13 @@ import {
   sessionStartCommand,
   writeRunFiles,
 } from './claude/ClaudeLauncher';
-import { buildPtyEnv, loginShellEnv } from './env/shellEnv';
+import { buildPtyEnv, findExecutable, loginShellEnv } from './env/shellEnv';
 import { FileWatcher } from './files/FileWatcher';
 import { FolderService } from './files/FolderService';
 import { MarkdownService } from './files/MarkdownService';
 import { PathOutsideWorkspaceError, resolveInWorkspace } from './files/resolveInWorkspace';
 import { writeFileAtomic } from './util/atomicWrite';
+import { GitService } from './git/GitService';
 import { handlePing } from './ipc/ping';
 import { nodePtySpawn } from './pty/nodePtySpawn';
 import { PtyService } from './pty/PtyService';
@@ -219,6 +223,21 @@ async function manifestFor(terminalId: string, moment: 'start' | 'prompt'): Prom
 
 const ptyEnv = () => loginShellEnv().then((env) => buildPtyEnv(env, app.getVersion()));
 
+// Code panels (M7): files Claude changed, read-only, with their version at git HEAD.
+let gitPath: Promise<string | null> | null = null;
+const git = new GitService(
+  () => (gitPath ??= ptyEnv().then((env) => findExecutable('git', env))),
+  ptyEnv,
+);
+const codeWatcher = new FileWatcher((path) => code.fileChanged(path));
+const code: CodeService = new CodeService({
+  root: () => workspace.root(),
+  git,
+  onFeed: (feed) => send(IpcChannels.codeFeedChanged, feed),
+  onFileChanged: (path) => send(IpcChannels.codeFileChanged, { path }),
+  watch: (paths) => codeWatcher.setPaths(paths),
+});
+
 const activity = new ActivityLog({
   dir: () => {
     const root = workspace.root();
@@ -263,6 +282,7 @@ const server = new LocalServer({
         return null;
       },
       settleTools: (id) => activity.settleRunning(id),
+      fileTouched: (id, tool, path, cwd) => void code.touched(id, tool, path, cwd),
       needsAttention: notifyAttention,
     }),
   createMcpServer: (terminalId) =>
@@ -317,6 +337,7 @@ workspace.onChange((change) => {
   for (const id of change.ids) {
     server.revoke(id);
     void activity.remove(id);
+    void code.watch(id, null);
   }
 });
 workspace.onBeforeClose(() => {
@@ -324,6 +345,8 @@ workspace.onBeforeClose(() => {
   markdown.reset();
   architecture.reset();
   connectionLog.reset();
+  code.reset();
+  git.forget();
   return folders.reset();
 });
 workspace.onChange((change, panels) => void architecture.boardChanged(change, panels));
@@ -467,6 +490,42 @@ async function extractFolderFile(id: string, rel: string): Promise<MarkdownCreat
       : { status: 'cancelled' };
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** "Apri file…" in a Code panel: any file of the project, shown read-only. */
+async function pickCodeFile(id: string): Promise<MarkdownCreateResult> {
+  const root = workspace.root();
+  if (!root || workspace.getPanel(id)?.type !== 'code') {
+    return { status: 'error', message: 'Panel inesistente' };
+  }
+  const options: Electron.OpenDialogOptions = {
+    title: 'Apri un file del progetto',
+    buttonLabel: 'Apri',
+    defaultPath: root,
+    properties: ['openFile'],
+  };
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
+  const picked = result.filePaths[0];
+  if (result.canceled || !picked) return { status: 'cancelled' };
+  try {
+    const path = await resolveInWorkspace(root, picked);
+    const set = workspace.dispatch({
+      type: 'setCodePinned',
+      id,
+      pinnedFile: relative(await resolveInWorkspace(root, '.'), path),
+    });
+    return set.ok ? { status: 'created', panelId: id } : { status: 'error', message: set.error };
+  } catch (err) {
+    const message =
+      err instanceof PathOutsideWorkspaceError
+        ? 'Il file deve stare dentro la cartella del progetto.'
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    return { status: 'error', message };
   }
 }
 
@@ -623,6 +682,20 @@ function registerIpc(): void {
     if (!parsed.success) return { ok: false, message: 'Richiesta non valida' } as const;
     return markdown.undo(parsed.data.id);
   });
+  ipcMain.handle(IpcChannels.codeFeed, () => code.list());
+  ipcMain.handle(IpcChannels.codeRead, (_event, payload: unknown) => {
+    const parsed = codeFileSchema.parse(payload);
+    return code.read(parsed.path);
+  });
+  ipcMain.on(IpcChannels.codeWatch, (_event, payload: unknown) => {
+    const parsed = codeWatchSchema.safeParse(payload);
+    if (parsed.success) void code.watch(parsed.data.id, parsed.data.path);
+  });
+  ipcMain.handle(IpcChannels.codePick, (_event, payload: unknown) => {
+    const parsed = panelIdPayloadSchema.safeParse(payload);
+    if (!parsed.success) return { status: 'error', message: 'Richiesta non valida' } as const;
+    return pickCodeFile(parsed.data.id);
+  });
   ipcMain.handle(IpcChannels.folderCreate, (_event, payload: unknown) => {
     const parsed = folderCreateSchema.safeParse(payload);
     if (!parsed.success) return { status: 'error', message: 'Richiesta non valida' } as const;
@@ -722,7 +795,9 @@ app.on('before-quit', (event) => {
       () =>
         void workspace
           .close({ notify: false })
-          .then(() => Promise.all([server.stop(), watcher.close(), folders.close()]))
+          .then(() =>
+            Promise.all([server.stop(), watcher.close(), folders.close(), codeWatcher.close()]),
+          )
           .finally(() => app.quit()),
     );
 });

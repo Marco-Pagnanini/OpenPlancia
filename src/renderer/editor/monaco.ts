@@ -36,6 +36,14 @@ monaco.editor.defineTheme('plancia-dark', {
     focusBorder: '#d9775799',
     'scrollbarSlider.background': '#34342f88',
     'scrollbarSlider.hoverBackground': '#45443faa',
+    // Diffs of the Code panel: the theme's green and red, not the default neon.
+    'diffEditor.insertedLineBackground': '#7fb59b14',
+    'diffEditor.insertedTextBackground': '#7fb59b33',
+    'diffEditor.removedLineBackground': '#e39a8714',
+    'diffEditor.removedTextBackground': '#e39a8738',
+    'diffEditor.diagonalFill': '#2c2c2966',
+    'diffEditorGutter.insertedLineBackground': '#7fb59b22',
+    'diffEditorGutter.removedLineBackground': '#e39a8722',
   },
 });
 
