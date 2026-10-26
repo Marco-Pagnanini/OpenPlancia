@@ -127,7 +127,8 @@ export class TerminalService {
       }
       const sessionId = resume ? panel.claudeSessionId : this.newSessionId();
       if (!sessionId) throw new StartError('no-session', 'Nessuna sessione da riprendere');
-      if (!resume) workspace.setClaudeSessionId(id, sessionId);
+      // A new session is named after the panel; resuming keeps the name it was created with.
+      if (!resume) workspace.setClaudeSessionId(id, sessionId, panel.title);
       // A session that never got a message has nothing to resume: start it, with the same id.
       const resumable = resume && ((await this.options.sessionExists?.(sessionId, env)) ?? true);
       const files = await this.options.prepareClaude?.(id);

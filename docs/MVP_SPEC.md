@@ -31,7 +31,7 @@ Obiettivo secondario, ma altrettanto importante: rendere **visibile** cosa fa l'
 
 ### Fuori dall'MVP (non implementare, ma non precludere)
 - Panel **Design** stile Figma.
-- Frecce **Terminale ↔ Terminale** (multi-agente). Nell'MVP la connessione viene rifiutata con un messaggio "in arrivo".
+- Frecce **Terminale ↔ Terminale** (multi-agente). Nell'MVP la connessione veniva rifiutata con un messaggio "in arrivo"; implementate dopo l'MVP in M8 (vedi §13 e §14).
 - Collaborazione multi-utente, cloud, account, telemetria.
 - Auto-update, firma e notarizzazione dei binari.
 
@@ -216,7 +216,7 @@ Implementale in `AccessService` come **funzioni pure** con test unitari completi
 | Terminale Claude → Architettura | ✅ | Claude scrive l'architettura |
 | Qualsiasi → Codice / Codice → Qualsiasi | ❌ | Il panel Codice non ha handle: segue gli agenti da solo |
 | Qualsiasi ↔ Terminale `shell` | ❌ | Solo i terminali in modalità `claude` sono collegabili |
-| Terminale Claude ↔ Terminale Claude | ❌ (MVP) | Tooltip: "Multi-agente: in arrivo" |
+| Terminale Claude → Terminale Claude | ✅ (M8) | Il primo può scrivere al secondo con SendMessage (messaggi nativi di Claude Code) |
 | Panel dati ↔ Panel dati | ❌ (MVP) | |
 
 Non sono ammesse connessioni duplicate (stessa sorgente e destinazione).
@@ -537,6 +537,7 @@ plancia/
 | M6 Architettura | fatto | `ArchitectureDoc` con zod (controlli incrociati, errori leggibili), dagre 3.1 per i nodi nuovi, anteprima SVG, editor React Flow in modalità focus, "Vedi JSON", `get_panel_schema`. Scenario di accettazione superato con Claude Code 2.1.310: disegnati client, API, 3 servizi e Postgres e collegato in lettura, Claude ha creato una cartella per ogni servizio con gli id e le relazioni del diagramma; con la freccia in scrittura, "aggiungi una coda tra API e worker" ha aggiunto il nodo `coda` e le due relazioni senza spostare i nodi esistenti (panel lampeggiante, "Annulla" funzionante); una relazione verso un nodo inesistente è stata rifiutata con `to: il nodo "fantasma" non esiste → at edges[8].to`, versione invariata. |
 | M6.5 Cartella | fatto | `FolderService` (indice, chokidar sulla cartella, versioni per file) sopra `MarkdownService` esteso per file (eco, Annulla e attribuzione condivisi con i panel Markdown). Accettazione superata con Claude Code 2.1.310: con `docs/` in lettura Claude ha risposto "pnpm" e le due voci aperte del piano senza usare strumenti; con la freccia in scrittura ha creato `adr/0002-coda.md` e spuntato la voce nel piano (versione 2), con il pallino "modificato da Claude" su entrambi i file. |
 | M7 Codice | fatto | Feed dal `PostToolUse` (Write/Edit/MultiEdit/NotebookEdit riusciti), filtro per terminale, Monaco in sola lettura con diff rispetto a `HEAD` (`git show`, solo lettura), aggiornamento in tempo reale, "Apri file…". Accettazione superata con Claude Code 2.1.310: chiesto di modificare `api-gateway/orders.go` e poi `worker/main.go`, il panel li ha elencati nell'ordine giusto (il più recente in alto) con il diff corretto rispetto al commit; una modifica fatta da fuori al file aperto è comparsa subito. |
+| M8 Multi-agente | fatto | Messaggi nativi tra sessioni di Claude Code (`SendMessage`, v2.1.224+) governati dalle frecce Terminale → Terminale. Accettazione superata con Claude Code 2.1.310: senza freccia "Claude" → "Claude 2" il messaggio è stato negato con la spiegazione; aggiunta la freccia, "Claude 2" ha ricevuto la richiesta e creato `agenti.txt`; senza freccia di ritorno la sua risposta è stata bloccata; con le due frecce ha risposto via `SendMessage` e l'ispettore mostra i due messaggi (filo "si scrivono"). |
 
 ---
 
@@ -547,7 +548,7 @@ plancia/
 - [x] `file_path` è in `tool_input.file_path` per Write/Edit/MultiEdit, `notebook_path` per NotebookEdit (documentazione e payload reali). Altri campi verificati: `notification_type` (`permission_prompt`, `idle_prompt`, …), `last_assistant_message` in Stop, `reason` in SessionEnd, `tool_use_id` in Pre/PostToolUse.
 - [x] Versione minima di Claude Code: 2.1.296 (vedi nota M3 sotto).
 - [ ] Prima di distribuire: verificare termini d'uso e regole di branding di Anthropic per un'app che avvia la CLI dell'utente.
-- [ ] Dopo l'MVP: multi-agente (frecce Terminale ↔ Terminale), valutando prima i canali nativi di Claude Code per la comunicazione tra sessioni; panel Design.
+- [x] Dopo l'MVP: multi-agente (frecce Terminale ↔ Terminale): fatto in M8 sui messaggi nativi di Claude Code. Resta il panel Design.
 - [x] **Node 22.12+ richiesto** (`.nvmrc` = 22.14.0): vitest 5 non supporta Node 20. (M0)
 - [x] **TypeScript fissato a ~6.0** invece di 7.x: typescript-eslint 8.72 supporta solo TS < 6.1. Da rivalutare quando typescript-eslint supporterà TS 7. In TS 6 `baseUrl` è deprecato: i `paths` sono relativi al tsconfig. (M0)
 - [x] **Preload in CJS** (`out/preload/index.cjs`): con `sandbox: true` il preload non può essere un modulo ES. Main e renderer restano ESM. (M0)
@@ -599,4 +600,9 @@ plancia/
 - [x] **Smontaggio del DiffEditor** (M7): `@monaco-editor/react` 4.7 distrugge i modelli prima che il widget li rilasci ("TextModel got disposed before DiffEditorWidget model got reset"). Il visualizzatore tiene i modelli (`keepCurrent…Model`), li stacca con `setModel(null)` nella propria pulizia, che React esegue prima di quella della libreria, e li distrugge subito dopo.
 - [x] **Riprendi tutti gli agenti** (dopo M7, su richiesta): alla riapertura ogni terminale Claude aspetta il suo "Riprendi sessione"; un pulsante nella barra in alto li avvia tutti insieme (riprende chi ha una sessione, avvia gli altri). Non parte da solo: avviare agenti consuma e l'utente può non volerli tutti.
 - [x] **Sessione senza conversazione** (dopo M7): una sessione avviata ma mai usata non ha transcript e `--resume` fallisce ("No conversation found"). Prima di riprendere si cerca `<sessionId>.jsonl` sotto `~/.claude/projects/*/` (o `CLAUDE_CONFIG_DIR`); se manca si avvia la stessa sessione da zero (`--session-id`). Se la cartella non esiste si prova comunque `--resume`.
+- [x] **Multi-agente (M8), scelte dell'utente**: freccia A → B = A può scrivere a B; senza freccia il messaggio è bloccato; sessioni fuori dalla lavagna bloccate; consegna nativa (il destinatario agisce da solo, con i suoi permessi).
+- [x] **Come**: niente protocollo nuovo. Claude Code ha già i messaggi tra sessioni (`ListAgents`/`SendMessage`, socket locale per sessione, attivi di default). OpenPlancia li regola nel `PreToolUse` e li registra nel `PostToolUse`. I channels sono stati scartati (anteprima, solo stdio, flag `--dangerously-…` con conferma), e così gli agent teams (i compagni nascono dentro una sessione, non sono i nostri panel).
+- [x] **Input reale di SendMessage** (letto con un hook di prova che negava la chiamata): `to`, `recipient`, `recipient_kind` ("name"), `message`/`content`, `summary`, `notify_when_idle`. Un messaggio a un proprio subagent ha la stessa forma: per questo OpenPlancia registra i subagent quando Claude li avvia (tool `Agent`: `name`, `agentId`) e li lascia passare.
+- [x] **Risposte**: una risposta è indirizzata al socket del mittente (`uds:/tmp/cc-socks/<pid>.sock`). Lo script ponte di SessionStart inoltra `CLAUDE_CODE_MESSAGING_SOCKET`, così OpenPlancia sa a quale terminale appartiene. Claude Code mostra i nomi con i trattini (`@Claude-2`): spazi, trattini e trattini bassi sono equivalenti.
+- [x] **Nome dell'agente**: è quello con cui la sessione è nata (`--name`), salvato come `claudeName`; rinominare il panel dopo non cambia come gli altri lo chiamano.
 - [ ] Possibili miglioramenti dopo l'MVP: pulsante "Riordina" (dagre su tutto il diagramma), unione tra modifiche locali non ancora salvate e scrittura di Claude (oggi vince Claude e compare un avviso).

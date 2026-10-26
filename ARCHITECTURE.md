@@ -1,6 +1,6 @@
 # Architettura di OpenPlancia
 
-> **Aggiornato a: M7** (panel Codice) · l'MVP è completo; dopo: multi-agente
+> **Aggiornato a: M8** (multi-agente) · MVP completo più agenti che si scrivono
 > Questo documento viene aggiornato alla fine di ogni milestone. Specifica di prodotto: [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
 
 OpenPlancia è un'app desktop **Electron**. Non c'è un backend remoto: il "backend" è il **processo main** (Node.js sul computer dell'utente), il "frontend" è il **renderer** (React in una finestra Chromium isolata). I due parlano solo attraverso un'API tipizzata e stretta esposta dal **preload**.
@@ -41,6 +41,7 @@ flowchart LR
     AR["ArchitectureService<br/>+ layout dagre"]
     FS["FolderService<br/>indice e watcher delle cartelle"]
     CS["CodeService + GitService<br/>feed dei file · HEAD"]
+    AG["AgentService<br/>chi può scrivere a chi"]
   end
 
   subgraph X["Processi figli"]
@@ -88,6 +89,9 @@ flowchart LR
   HK -- "PostToolUse Write/Edit" --> CS
   CS -- "git show HEAD:path" --> DISK
   API <--> CS
+  HK -- "PreToolUse / PostToolUse SendMessage" --> AG
+  AG -- "messaggi tra agenti" --> API
+  CC -. "SendMessage nativo (socket locale)" .-> CC
 ```
 
 **Regole che tengono in piedi tutto** (spec §3):
@@ -328,7 +332,7 @@ flowchart LR
   MDp <-. "entrambe = un filo viola a due punte" .-> CC
   X1["Codice"] -. "nessuna porta" .- CC
   X2["Terminale shell"] -. "rifiutato" .- CC
-  CC -. "Multi-agente: in arrivo" .- CC2["altro Claude"]
+  CC -- "freccia verso un altro Claude = può scrivergli (turchese, M8)" --> CC2["altro Claude"]
 ```
 
 | Caso | Esito (`checkConnection`) |
@@ -336,7 +340,7 @@ flowchart LR
 | dati ↔ Claude | ammesso (lettura o scrittura in base al verso) |
 | Codice ↔ qualsiasi | "Il panel Codice non si collega: segue gli agenti da solo" |
 | shell ↔ qualsiasi | "Solo i terminali Claude si possono collegare" |
-| Claude ↔ Claude | "Multi-agente: in arrivo" |
+| Claude ↔ Claude | ammesso (M8): chi parte dalla freccia può scrivere all'altro |
 | dati ↔ dati | "Collega un panel a un terminale Claude" |
 | doppione | "Questo collegamento esiste già" |
 
@@ -531,7 +535,47 @@ sequenceDiagram
 
 ---
 
-## 11. Dove finiscono i dati
+## 11. Agenti che si scrivono (M8)
+
+Claude Code ha già i **messaggi tra sessioni**: con `ListAgents` e `SendMessage` una sessione scrive a un'altra sulla stessa macchina, su un socket locale. Il messaggio arriva tra un tool e l'altro, oppure apre un turno se l'altra è in attesa. OpenPlancia non aggiunge un protocollo: con le frecce **decide chi può scrivere a chi** e mostra i messaggi sulla lavagna.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Claude "backend"
+  participant H as hooks.ts
+  participant AS as AgentService
+  participant B as Claude "Claude 2"
+  participant R as Lavagna
+
+  A->>H: PreToolUse SendMessage { to: "Claude 2" }
+  H->>AS: checkSend
+  alt freccia backend → Claude 2
+    AS-->>H: ok
+    A->>B: messaggio nativo di Claude Code
+    A->>H: PostToolUse SendMessage
+    H->>AS: toolDone → storico della coppia
+    AS-->>R: plancia:agents:message → filo turchese animato, ispettore
+  else nessuna freccia, o sessione fuori lavagna
+    AS-->>A: deny "Messaggio negato: … aggiungere una freccia …"
+  end
+  B->>H: PreToolUse SendMessage { to: "uds:/tmp/cc-socks/…sock" } (risposta)
+  H->>AS: il socket è di "backend"? serve la freccia Claude 2 → backend
+```
+
+| Regola | Dove |
+|---|---|
+| Freccia A → B: A può scrivere a B. Due frecce: si scrivono. Filo turchese, separato dai fili dei panel | `agentPairs`, `agentLinks` in [access.ts](src/shared/access.ts), [AgentEdge.tsx](src/renderer/canvas/AgentEdge.tsx) |
+| Un agente si riconosce dal nome con cui la sua sessione è nata (`--name`, salvato come `claudeName`), con o senza `@`, virgolette, trattini; oppure dall'id del panel, della sessione o dal socket di risposta | `resolve` in [AgentService.ts](src/main/agents/AgentService.ts) |
+| I subagent che Claude avvia (tool `Agent`, `name` e `agentId`) restano raggiungibili senza frecce: `SendMessage` serve anche a loro | `toolDone` |
+| Qualsiasi altro destinatario (sessioni fuori lavagna, altri terminali, cloud) è bloccato | `checkSend` |
+| Il socket di ogni sessione arriva a SessionStart dallo script ponte (`CLAUDE_CODE_MESSAGING_SOCKET`), così le risposte indirizzate al socket si riconoscono | [plancia-hook.cjs](resources/plancia-hook.cjs) |
+| Ogni agente sa dal manifesto a chi può scrivere e chi può scrivergli; i cambi di frecce arrivano col messaggio successivo | `renderManifest`, `describeAgentChanges` |
+| Consegna, code, limiti anti-loop e "un messaggio non approva mai permessi" restano di Claude Code | — |
+
+---
+
+## 12. Dove finiscono i dati
 
 ```mermaid
 flowchart TB
@@ -555,9 +599,9 @@ flowchart TB
 
 ---
 
-## 12. Mappa dei file per funzionalità
+## 13. Mappa dei file per funzionalità
 
-### 12.1 Contratto condiviso — `src/shared/`
+### 13.1 Contratto condiviso — `src/shared/`
 
 | File | Cosa contiene | Usato da |
 |---|---|---|
@@ -565,18 +609,18 @@ flowchart TB
 | [schemas.ts](src/shared/schemas.ts) | Schemi zod di ogni confine: `persistedBoardSchema` (board.json), `boardIntentSchema` (intenti), payload IPC dei terminali, `hookPayloadSchema` (corpo degli hook), `markdownCreateSchema` / `markdownWriteSchema`, `workspacePathSchema`, `appSettingsSchema`. | main (validazione), test |
 | [ipc.ts](src/shared/ipc.ts) | Nomi dei canali IPC (`plancia:*`), tipi dei messaggi (`MarkdownDoc`, `MarkdownWriteResult`…) e interfaccia `PlanciaApi` = forma di `window.plancia`. | main, preload, renderer |
 | [panels.ts](src/shared/panels.ts) | Dimensioni predefinite e minime dei panel, titoli predefiniti. | BoardStore, renderer |
-| [access.ts](src/shared/access.ts) | **Regole delle frecce** (funzioni pure, spec §6): `checkConnection`, `accessFor`, `wirePairs` (lettura + scrittura = un filo), `connectedPanels`, `isConnectable`, `accessLabel`. | main (applicazione), renderer (feedback) |
+| [access.ts](src/shared/access.ts) | **Regole delle frecce** (funzioni pure, spec §6): `checkConnection`, `accessFor`, `wirePairs` (lettura + scrittura = un filo), `agentPairs` e `agentLinks` (frecce tra agenti, M8), `connectedPanels`, `isConnectable`, `accessLabel`. | main (applicazione), renderer (feedback) |
 | [architecture.ts](src/shared/architecture.ts) | **ArchitectureDoc** (M6): schema zod con controlli incrociati (id unici, relazioni verso nodi esistenti), `parseArchitectureDoc` (errori leggibili), `formatArchitectureForClaude`, `diffArchitecture`, `freeArchId`, dimensione dei nodi. | ArchitectureService, PanelTools, renderer |
 | [activity.ts](src/shared/activity.ts) | `ActivityEvent` (voce della timeline) e stati dei tool (`running/ok/failed/cancelled`). | ActivityLog, ActivityPanel |
 
-### 12.2 Main — avvio e IPC
+### 13.2 Main — avvio e IPC
 
 | File | Contesto |
 |---|---|
 | [main/index.ts](src/main/index.ts) | **Punto d'ingresso.** Crea la finestra sicura, istanzia e collega i servizi (WorkspaceService, PtyService, TerminalService, ActivityLog, LocalServer), registra tutti gli handler IPC con validazione zod, avvia il server, ripristina l'ultima cartella, sonda `claude --version`, gestisce l'uscita pulita (chiude i processi, salva, ferma il server). In sviluppo accetta `PLANCIA_USER_DATA`. |
 | [ipc/ping.ts](src/main/ipc/ping.ts) | Handler di prova della M0 (`window.plancia.ping()`). |
 
-### 12.3 Main — lavagna e workspace (M1)
+### 13.3 Main — lavagna e workspace (M1)
 
 | File | Contesto |
 |---|---|
@@ -588,7 +632,7 @@ flowchart TB
 | [util/debounce.ts](src/main/util/debounce.ts) | Task asincrono con debounce, senza sovrapposizioni, con `flush` (usato all'uscita). |
 | [files/resolveInWorkspace.ts](src/main/files/resolveInWorkspace.ts) | Risolve un percorso dentro il progetto e rifiuta traversal e symlink che escono, anche per file non ancora creati. Oggi protegge la `cwd` dei terminali; dalla M4 ogni file dei panel. |
 
-### 12.4 Main — terminali (M2)
+### 13.4 Main — terminali (M2)
 
 | File | Contesto |
 |---|---|
@@ -598,7 +642,7 @@ flowchart TB
 | [env/shellEnv.ts](src/main/env/shellEnv.ts) | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di OpenPlancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH. |
 | [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows, `claudeSessionExists` (c'è una conversazione salvata da riprendere?). |
 
-### 12.5 Main — server locale, hook, MCP, attività (M3)
+### 13.5 Main — server locale, hook, MCP, attività (M3)
 
 | File | Contesto |
 |---|---|
@@ -607,9 +651,9 @@ flowchart TB
 | [server/toolLabel.ts](src/main/server/toolLabel.ts) | Etichette leggibili dei tool (`Bash: npm test`, `Edit: src/auth.ts`, `plancia › list_panels`) e percorsi relativi al progetto. |
 | [server/mcp.ts](src/main/server/mcp.ts) | Server MCP `plancia` (uno per richiesta, stateless). Oggi: `list_panels` (lista vuota fino alla M5). Elenco dei tool pre-approvati. |
 | [activity/ActivityLog.ts](src/main/activity/ActivityLog.ts) | Timeline per terminale: in memoria + JSONL su disco per workspace, ultimi 500 eventi, scritture in coda, aggiornamento dei tool per `tool_use_id`, tool non conclusi → "annullati". |
-| [resources/plancia-hook.cjs](resources/plancia-hook.cjs) | Ponte per gli hook `command`: legge l'evento da stdin, lo manda al server, stampa la risposta. Esce sempre con 0. |
+| [resources/plancia-hook.cjs](resources/plancia-hook.cjs) | Ponte per gli hook `command`: legge l'evento da stdin, lo manda al server, stampa la risposta. Esce sempre con 0. Dalla M8 aggiunge il socket della sessione (`plancia_messaging_socket`). |
 
-### 12.6 Main — file e panel Markdown (M4)
+### 13.6 Main — file e panel Markdown (M4)
 
 | File | Contesto |
 |---|---|
@@ -617,7 +661,7 @@ flowchart TB
 | [files/FileWatcher.ts](src/main/files/FileWatcher.ts) | chokidar su un insieme esplicito di file (quelli dei panel), con `atomic` e `awaitWriteFinish`: i salvataggi "file temporaneo + rename" di editor e OpenPlancia arrivano come un solo cambiamento. |
 | [main/index.ts](src/main/index.ts) (parte M4) | Dialog nativo "Nuovo / Apri file markdown" (`createMarkdownPanel`), handler IPC `markdown:*`, sincronizzazione del watcher all'apertura di una cartella e quando si creano, duplicano o eliminano panel. |
 
-### 12.6b Main — panel Cartella (M6.5)
+### 13.6b Main — panel Cartella (M6.5)
 
 | File | Contesto |
 |---|---|
@@ -625,7 +669,7 @@ flowchart TB
 | [files/MarkdownService.ts](src/main/files/MarkdownService.ts) (parte M6.5) | Operazioni per file (`readPath`, `writePath`, `undoPath`, `canUndoPath`), `tracks` e `onPathChanged`: la stessa logica di eco, Annulla e attribuzione vale per i file delle cartelle. |
 | [main/index.ts](src/main/index.ts) (parte M6.5) | Dialog "Scegli una cartella del progetto", "Apri come panel" (crea un panel Markdown accanto), handler `folder:*`. |
 
-### 12.7 Main — connessioni (M5)
+### 13.7 Main — connessioni (M5)
 
 | File | Contesto |
 |---|---|
@@ -637,7 +681,7 @@ flowchart TB
 | [server/mcp.ts](src/main/server/mcp.ts) (parte M5) | Registra `list_panels`, `read_panel`, `write_panel` con schemi zod; errori come `isError`. |
 | [files/MarkdownService.ts](src/main/files/MarkdownService.ts) (parte M5) | Scritture con autore (terminale), pila di Annulla per file (20), `expectClaudeWrite` per attribuire a Claude la modifica che segue un Edit consentito. |
 
-### 12.7b Main — panel Codice (M7)
+### 13.7b Main — panel Codice (M7)
 
 | File | Contesto |
 |---|---|
@@ -646,7 +690,16 @@ flowchart TB
 | [server/hooks.ts](src/main/server/hooks.ts) (parte M7) | Dopo un `PostToolUse` riuscito di Write/Edit/MultiEdit/NotebookEdit chiama `fileTouched`. |
 | [main/index.ts](src/main/index.ts) (parte M7) | Secondo FileWatcher per i file mostrati dai panel Codice, dialog "Apri un file del progetto", handler `code:*`. |
 
-### 12.8 Main — panel Architettura (M6)
+### 13.7c Main — agenti (M8)
+
+| File | Contesto |
+|---|---|
+| [agents/AgentService.ts](src/main/agents/AgentService.ts) | `checkSend` (PreToolUse di SendMessage: freccia, subagent, fuori lavagna), `toolDone` (subagent avviati, messaggi inviati → storico per coppia, ultimi 50), `setAddress` (socket della sessione), `between`, `forget`. `agentName`: nome della sessione. |
+| [server/hooks.ts](src/main/server/hooks.ts) (parte M8) | `checkTool` (prima `checkFileWrite`) vale anche per SendMessage; `toolDone` a ogni PostToolUse riuscito; il socket a SessionStart. |
+| [claude/manifest.ts](src/main/claude/manifest.ts) (parte M8) | Sezione "agenti collegati" e cambi delle frecce tra agenti. |
+| [terminal/TerminalService.ts](src/main/terminal/TerminalService.ts) (parte M8) | Una sessione nuova salva il nome con cui è nata (`claudeName`). |
+
+### 13.8 Main — panel Architettura (M6)
 
 | File | Contesto |
 |---|---|
@@ -655,13 +708,13 @@ flowchart TB
 | [server/mcp.ts](src/main/server/mcp.ts) (parte M6) | Tool `get_panel_schema` (`type: "architecture"`); descrizione di `write_panel` per le architetture. |
 | [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) (parte M6) | Il prompt di sistema spiega che le architetture sono JSON da riscrivere interi con `write_panel`. |
 
-### 12.9 Preload
+### 13.9 Preload
 
 | File | Contesto |
 |---|---|
 | [preload/index.ts](src/preload/index.ts) | Espone `window.plancia` con `contextBridge`: `workspace`, `board`, `app`, `terminal`, `markdown` (anche `undo`), `folder` (indice, file, estrazione), `architecture`, `connections` (cronologia, eventi d'uso, manifesto), `activity`. Solo chiamate ad alto livello, mai `ipcRenderer` grezzo. Compilato in CommonJS (`index.cjs`) perché la sandbox lo richiede. |
 
-### 12.10 Renderer — app e lavagna
+### 13.10 Renderer — app e lavagna
 
 | File | Contesto |
 |---|---|
@@ -672,12 +725,13 @@ flowchart TB
 | [canvas/ToolRail.tsx](src/renderer/canvas/ToolRail.tsx) · [tools.ts](src/renderer/canvas/tools.ts) | Barra strumenti verticale: puntatore, sposta lavagna, creazione panel, menu Markdown (nuovo / apri file), tooltip con scorciatoie. |
 | [canvas/useShortcuts.ts](src/renderer/canvas/useShortcuts.ts) | Scorciatoie a un tasto (V, H, T, L, M, A, K, Esc, 0). `isTyping` le disattiva in campi di testo, Monaco (`EditContext`), xterm e `.nokey`, e in modalità focus. |
 | [canvas/useCreatePanel.ts](src/renderer/canvas/useCreatePanel.ts) | Crea un panel al centro della vista, a cascata. `useCreateMarkdownPanel` chiede al main il dialog del file. |
+| [canvas/AgentEdge.tsx](src/renderer/canvas/AgentEdge.tsx) | Filo turchese tra due terminali Claude (M8): "può scrivere" / "si scrivono", animato con "messaggio · ~N token" dopo ogni SendMessage. |
 | [canvas/WireEdge.tsx](src/renderer/canvas/WireEdge.tsx) · [wireStyle.ts](src/renderer/canvas/wireStyle.ts) | Filo tra panel e Claude: colore e punte per verso, etichetta cliccabile (apre l'ispettore), tratteggio animato dopo ogni uso. Canvas in `ConnectionMode.Loose`: si trascina da una porta all'altra, `isValidConnection` e `onConnectEnd` usano le regole condivise. |
 | [canvas/ZoomControls.tsx](src/renderer/canvas/ZoomControls.tsx) | − / percentuale / + / adatta. |
 | [canvas/FocusOverlay.tsx](src/renderer/canvas/FocusOverlay.tsx) | Modalità focus: un panel a schermo pieno al 100%. Esc esce, tranne quando si scrive in un terminale. |
 | [components/](src/renderer/components/) | `EmptyState` (schermata iniziale: apri cartella e cartelle recenti), `ErrorToast`, `InfoToast`, `Logo`. |
 
-### 12.11 Renderer — panel
+### 13.11 Renderer — panel
 
 | File | Contesto |
 |---|---|
@@ -700,12 +754,13 @@ flowchart TB
 | [panels/terminal/TerminalBody.tsx](src/renderer/panels/terminal/TerminalBody.tsx) | Corpo del terminale: schermata di avvio / ripresa, errore (Claude non trovato), xterm, barra "processo terminato". |
 | [panels/terminal/TerminalPreview.tsx](src/renderer/panels/terminal/TerminalPreview.tsx) · [xtermTheme.ts](src/renderer/panels/terminal/xtermTheme.ts) | Anteprima a zoom basso; tema e font del terminale (con fallback Nerd Font). |
 
-### 12.12 Renderer — ispettori e store
+### 13.12 Renderer — ispettori e store
 
 | File | Contesto |
 |---|---|
 | [inspectors/WireInspector.tsx](src/renderer/inspectors/WireInspector.tsx) | Ispettore della freccia (spec §9). Condivide il lato destro con Attività: uno alla volta. |
 | [inspectors/ManifestModal.tsx](src/renderer/inspectors/ManifestModal.tsx) | "Cosa vede Claude" (menu del terminale Claude). |
+| [inspectors/AgentInspector.tsx](src/renderer/inspectors/AgentInspector.tsx) | Ispettore del filo tra agenti: chi può scrivere a chi ("Consenti" per il verso mancante), messaggi con mittente, ora, riassunto e testo, "Scollega". `WireInspector` sceglie tra questo e quello dei panel. |
 | [inspectors/ArchJsonModal.tsx](src/renderer/inspectors/ArchJsonModal.tsx) | "Vedi JSON": il documento esattamente come lo riceve Claude, con caratteri, token stimati e "Copia". |
 | [stores/connectionStore.ts](src/renderer/stores/connectionStore.ts) | Ultimo uso per filo e fili "attivi" negli ultimi 3 s (animazione), stima token = caratteri / 4. |
 | [inspectors/ActivityPanel.tsx](src/renderer/inspectors/ActivityPanel.tsx) | Pannello laterale "Attività": timeline cronologica con icone per tipo e stato dei tool. |
@@ -718,7 +773,7 @@ flowchart TB
 | [stores/architectureStore.ts](src/renderer/stores/architectureStore.ts) | Per ogni panel Architettura: documento mostrato, versione, autosalvataggio dopo 400 ms, conflitti, ultima modifica di Claude (diff per evidenziare), Annulla. |
 | [stores/uiStore.ts](src/renderer/stores/uiStore.ts) | Stato solo visivo: strumento attivo, panel in modalità focus, pannello Attività aperto, menu Markdown aperto, panel di cui mostrare il JSON. |
 
-### 12.13 Test — `tests/`
+### 13.13 Test — `tests/`
 
 | Area | File |
 |---|---|
@@ -726,6 +781,7 @@ flowchart TB
 | Terminali | `PtyService`, `TerminalService` (con [fakePty.ts](tests/fakePty.ts)), `shellEnv` |
 | Sicurezza percorsi | `resolveInWorkspace` |
 | Connessioni (M5) | `access` (tabella della spec), `manifest` (formato, limiti, solo-se-cambiato), `panelAccess` (PreToolUse, tool MCP, conflitti, percorsi fuori progetto, Annulla, attribuzione), `hooks` (iniezione e deny), `BoardStore` (connect/disconnect) |
+| Agenti (M8) | `agents` (freccia richiesta, nomi con `@`/virgolette/trattini/id, risposte al socket, sessioni fuori lavagna, subagent, storico, manifesto e cambi, hook di blocco e `toolDone`), `access` (`agentPairs`, `agentLinks`), `LocalServer` (socket inoltrato dal ponte) |
 | Codice (M7) | `code` (feed in ordine con conteggio, file fuori progetto e `.plancia/` ignorati, limite del feed, lettura senza git e con git vero: HEAD, file nuovo, file eliminato, progetto in una sottocartella del repo, symlink fuori, binari e file grandi, git assente, file osservati), `hooks` (solo modifiche riuscite di Write/Edit), `BoardStore` (`setCodeFollow`, `setCodePinned`) |
 | Cartella (M6.5) | `folder` (file ammessi, indice, versioni, file nuovi, percorsi rifiutati anche via symlink, file condiviso con un panel Markdown e Annulla unico, modifiche esterne, blocco PreToolUse e frecce sommate, `read_panel`/`write_panel` con `path`, manifesto e differenze per file, file in due cartelle una volta sola), `BoardStore` (creazione) |
 | Architettura (M6) | `architecture` (schema e messaggi d'errore, formato per Claude, diff, id, layout che non sposta i nodi esistenti, file creati / copiati / eliminati col panel, Annulla), `panelAccess` (tool MCP sulle architetture, JSON non valido, conflitti, `get_panel_schema`) |
@@ -735,23 +791,24 @@ flowchart TB
 
 ---
 
-## 13. Roadmap e dopo l'MVP
+## 14. Roadmap e dopo l'MVP
 
 ```mermaid
 flowchart LR
   M0["M0 Scaffold ✅"] --> M1["M1 Lavagna ✅"] --> M2["M2 Terminali ✅"] --> M3["M3 Server e hook ✅"]
-  M3 --> M4["M4 Markdown ✅"] --> M5["M5 Connessioni ✅"] --> M6["M6 Architettura ✅"] --> M65["M6.5 Cartella ✅"] --> M7["M7 Codice ✅"] -.-> M8["Multi-agente (dopo l'MVP)"]
+  M3 --> M4["M4 Markdown ✅"] --> M5["M5 Connessioni ✅"] --> M6["M6 Architettura ✅"] --> M65["M6.5 Cartella ✅"] --> M7["M7 Codice ✅"] --> M8["M8 Multi-agente ✅"]
 ```
 
-L'MVP della spec è completo. Prossimo passo discusso: **multi-agente** (frecce Terminale ↔ Terminale), da progettare partendo dai canali che Claude Code offre già per far comunicare più sessioni.
+L'MVP della spec è completo e M8 aggiunge gli agenti che si scrivono. Idee aperte: panel Design, ripresa automatica degli agenti all'apertura (opzionale), "Riordina" negli schemi.
 
 ---
 
-## 14. Registro degli aggiornamenti
+## 15. Registro degli aggiornamenti
 
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
 | — | "Riprendi tutti gli agenti" nella barra in alto; ripresa di una sessione senza conversazione salvata = sessione nuova con lo stesso id |
+| M8 | Agenti che si scrivono: nuova sezione 11 (messaggi nativi governati dalle frecce, subagent, risposte al socket), AgentService nella visione d'insieme, tabella delle connessioni aggiornata, file nuovi in mappa |
 | M7 | Panel Codice: nuova sezione 10 (feed dal PostToolUse, git in sola lettura, regole), CodeService e GitService nella visione d'insieme, file nuovi in mappa, `PanelPlaceholder` rimosso; roadmap chiusa (MVP completo) |
 | M6.5 | Panel Cartella: nuova sezione 9 (albero, file condivisi con MarkdownService, contesto a indice, permessi sommati), FolderService nella visione d'insieme, file nuovi in mappa; sezioni successive rinumerate |
 | M6 | Panel Architettura: nuova sezione 8 (documento, flusso di scrittura di Claude, regole, costo in token), ArchitectureService nella visione d'insieme, `.arch.json` nei dati, file nuovi in mappa; sezioni successive rinumerate |

@@ -43,7 +43,7 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
       settled++;
     },
     manifest: async (_id, moment) => manifests[moment],
-    checkFileWrite: async (_id, tool, input) =>
+    checkTool: async (_id, tool, input) =>
       tool === 'Edit' && input?.['file_path'] === '/repo/AGENTS.md' ? deny : null,
     fileTouched: (_id, tool, path) => touched.push(`${tool} ${path}`),
   };

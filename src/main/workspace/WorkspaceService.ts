@@ -84,8 +84,8 @@ export class WorkspaceService {
     return store.bumpVersion(id);
   }
 
-  setClaudeSessionId(id: string, sessionId: string): void {
-    this.current?.store.setClaudeSessionId(id, sessionId);
+  setClaudeSessionId(id: string, sessionId: string, name?: string): void {
+    this.current?.store.setClaudeSessionId(id, sessionId, name);
   }
 
   snapshot(): WorkspaceSnapshot | null {

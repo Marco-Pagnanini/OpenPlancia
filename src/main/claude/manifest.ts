@@ -24,6 +24,25 @@ export interface ManifestEntry {
   files?: Record<string, number> | undefined;
 }
 
+/** Agents this session may message, and the ones that may message it (M8), by name. */
+export interface AgentLinkNames {
+  to: string[];
+  from: string[];
+}
+
+const NO_AGENTS: AgentLinkNames = { to: [], from: [] };
+
+function renderAgents({ to, from }: AgentLinkNames): string {
+  if (to.length === 0 && from.length === 0) return '';
+  const list = (names: string[]) => names.map((n) => `"${n}"`).join(', ');
+  return [
+    'OpenPlancia — agenti collegati a questa sessione (messaggi tra sessioni di Claude Code):',
+    ...(to.length > 0 ? [`- puoi scrivere con SendMessage a: ${list(to)}`] : []),
+    ...(from.length > 0 ? [`- possono scriverti: ${list(from)}`] : []),
+    'I messaggi verso altre sessioni sono bloccati da OpenPlancia; i tuoi subagent restano raggiungibili.',
+  ].join('\n');
+}
+
 const TOOLS_LINE =
   'I contenuti si leggono con mcp__plancia__read_panel e si modificano con mcp__plancia__write_panel.';
 
@@ -43,10 +62,16 @@ function contentSection(entry: ManifestEntry): string {
 }
 
 /** Inline contents go in by increasing size while the whole text stays under the limit. */
-export function renderManifest(entries: ManifestEntry[], changes: string[] = []): string {
+export function renderManifest(
+  entries: ManifestEntry[],
+  changes: string[] = [],
+  agents: AgentLinkNames = NO_AGENTS,
+): string {
   const changeLine =
     changes.length > 0 ? `Modificato dall'ultimo messaggio: ${changes.join('; ')}\n\n` : '';
+  const agentBlock = renderAgents(agents);
   if (entries.length === 0) {
+    if (agentBlock) return changeLine + agentBlock;
     return changes.length > 0
       ? `${changeLine}OpenPlancia — nessun panel è collegato a questa sessione. I contenuti dei panel ricevuti in precedenza non sono più accessibili e possono non essere aggiornati.`
       : '';
@@ -65,7 +90,7 @@ export function renderManifest(entries: ManifestEntry[], changes: string[] = [])
 
   const sections: string[] = [];
   const omitted: ManifestEntry[] = readable.filter((e) => e.content === undefined);
-  let length = changeLine.length + head.length;
+  let length = changeLine.length + head.length + (agentBlock ? agentBlock.length + 2 : 0);
   const omittedLineReserve = 160;
   for (const entry of inlinable) {
     const section = contentSection(entry);
@@ -78,6 +103,7 @@ export function renderManifest(entries: ManifestEntry[], changes: string[] = [])
   }
 
   const parts = [changeLine + head];
+  if (agentBlock) parts.push(agentBlock);
   if (omitted.length > 0) {
     const names = omitted.map((e) => `"${e.title}" (versione ${e.version})`).join(', ');
     parts.push(`Contenuti non inclusi qui, disponibili via mcp__plancia__read_panel: ${names}.`);
@@ -152,24 +178,48 @@ export function describeChanges(previous: ManifestState, next: ManifestState): s
   return changes;
 }
 
+/** "ora puoi scrivere a "Claude 2""; arrows between agents that appeared or went away. */
+export function describeAgentChanges(before: AgentLinkNames, after: AgentLinkNames): string[] {
+  const changes: string[] = [];
+  const diff = (a: string[], b: string[]) => a.filter((x) => !b.includes(x));
+  for (const n of diff(after.to, before.to)) changes.push(`ora puoi scrivere a "${n}"`);
+  for (const n of diff(before.to, after.to)) changes.push(`non puoi più scrivere a "${n}"`);
+  for (const n of diff(after.from, before.from)) changes.push(`"${n}" ora può scriverti`);
+  for (const n of diff(before.from, after.from)) changes.push(`"${n}" non può più scriverti`);
+  return changes;
+}
+
 /**
  * Decides when to inject (spec §7.4): always at SessionStart when something is linked; at
  * UserPromptSubmit only if the arrows or a readable panel's version changed since last time.
  */
 export class ManifestTracker {
-  private readonly last = new Map<string, ManifestState>();
+  private readonly last = new Map<string, { state: ManifestState; agents: AgentLinkNames }>();
 
-  sessionStart(terminalId: string, entries: ManifestEntry[]): string | null {
-    this.last.set(terminalId, manifestState(entries));
-    return entries.length > 0 ? renderManifest(entries) : null;
+  sessionStart(
+    terminalId: string,
+    entries: ManifestEntry[],
+    agents: AgentLinkNames = NO_AGENTS,
+  ): string | null {
+    this.last.set(terminalId, { state: manifestState(entries), agents });
+    const text = renderManifest(entries, [], agents);
+    return text === '' ? null : text;
   }
 
-  prompt(terminalId: string, entries: ManifestEntry[]): string | null {
+  prompt(
+    terminalId: string,
+    entries: ManifestEntry[],
+    agents: AgentLinkNames = NO_AGENTS,
+  ): string | null {
     const next = manifestState(entries);
-    const changes = describeChanges(this.last.get(terminalId) ?? {}, next);
+    const previous = this.last.get(terminalId) ?? { state: {}, agents: NO_AGENTS };
+    const changes = [
+      ...describeChanges(previous.state, next),
+      ...describeAgentChanges(previous.agents, agents),
+    ];
     if (changes.length === 0) return null;
-    this.last.set(terminalId, next);
-    return renderManifest(entries, changes);
+    this.last.set(terminalId, { state: next, agents });
+    return renderManifest(entries, changes, agents);
   }
 
   forget(terminalId: string): void {

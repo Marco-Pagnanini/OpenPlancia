@@ -56,7 +56,8 @@ Una freccia da un panel verso questo terminale dà accesso in lettura a quel pan
 I panel collegati (file markdown, schemi di architettura) sono elencati dal tool mcp__plancia__list_panels.
 mcp__plancia__read_panel e mcp__plancia__write_panel sono l'unico modo corretto per leggere e modificare architetture e panel markdown collegati: OpenPlancia verifica l'accesso e valida i contenuti.
 Gli schemi di architettura sono documenti JSON (ArchitectureDoc, schema da mcp__plancia__get_panel_schema): si modificano riscrivendo il documento completo con write_panel; i nodi nuovi vengono posizionati da OpenPlancia.
-L'utente vede sulla lavagna quali panel vengono letti e scritti.
+Una freccia da questo terminale verso un altro terminale Claude permette di scrivergli con SendMessage (con il nome indicato da OpenPlancia); senza freccia OpenPlancia blocca il messaggio. I propri subagent restano raggiungibili.
+L'utente vede sulla lavagna quali panel vengono letti e scritti e quali agenti si scrivono.
 `;
 
 function quoteSh(value: string): string {

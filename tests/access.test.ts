@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   accessFor,
   accessLabel,
+  agentLinks,
+  agentPairs,
   checkConnection,
   connectedPanels,
   isConnectable,
@@ -64,7 +66,7 @@ describe('checkConnection (spec §6 table)', () => {
     ['markdown → shell', md, shell, 'shell-terminal'],
     ['shell → markdown', shell, md, 'shell-terminal'],
     ['Claude → shell', c1, shell, 'shell-terminal'],
-    ['Claude → Claude', c1, c2, 'multi-agent'],
+    ['Claude → Claude (M8: may message)', c1, c2, true],
     ['markdown → architecture', md, arch, 'data-to-data'],
     ['markdown → markdown', md, md2, 'data-to-data'],
     ['panel → itself', c1, c1, 'same-panel'],
@@ -76,14 +78,38 @@ describe('checkConnection (spec §6 table)', () => {
     else expect(result).toMatchObject({ ok: false, reason: expected });
   });
 
-  it('explains multi-agent as coming soon', () => {
-    expect(checkConnection(c1, c2, [])).toMatchObject({ message: 'Multi-agente: in arrivo' });
-  });
-
   it('refuses duplicates but allows the opposite direction', () => {
     const existing = [conn('md', 'c1')];
     expect(checkConnection(md, c1, existing)).toMatchObject({ ok: false, reason: 'duplicate' });
     expect(checkConnection(c1, md, existing)).toEqual({ ok: true });
+  });
+});
+
+describe('arrows between agents (M8)', () => {
+  const c3 = claude('c3');
+  const panels = [c1, c2, c3, md];
+  const connections = [conn('c1', 'c2'), conn('c2', 'c1'), conn('c3', 'c1'), conn('md', 'c1')];
+
+  it('groups them per pair of terminals, apart from the panel wires', () => {
+    expect(agentPairs(panels, connections)).toEqual([
+      {
+        key: 'agents:c1|c2',
+        a: 'c1',
+        b: 'c2',
+        aToB: true,
+        bToA: true,
+        connectionIds: ['c1>c2', 'c2>c1'],
+      },
+      { key: 'agents:c1|c3', a: 'c1', b: 'c3', aToB: false, bToA: true, connectionIds: ['c3>c1'] },
+    ]);
+    expect(wirePairs(panels, connections).map((p) => p.key)).toEqual(['c1|md']);
+  });
+
+  it('tells each agent whom it may write to and who may write to it', () => {
+    const links = agentLinks('c1', panels, connections);
+    expect(links.to.map((p) => p.id)).toEqual(['c2']);
+    expect(links.from.map((p) => p.id)).toEqual(['c2', 'c3']);
+    expect(agentLinks('md', panels, connections)).toEqual({ to: [], from: [] });
   });
 });
 

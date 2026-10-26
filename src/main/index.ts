@@ -9,8 +9,10 @@ import {
   type MarkdownCreateResult,
   type OpenWorkspaceResult,
 } from '@shared/ipc';
+import { agentLinks } from '@shared/access';
 import { formatArchitectureForClaude } from '@shared/architecture';
 import {
+  agentHistorySchema,
   architectureWriteSchema,
   codeFileSchema,
   codeWatchSchema,
@@ -33,6 +35,7 @@ import { AccessService } from './access/AccessService';
 import { ConnectionLog } from './access/ConnectionLog';
 import { PanelTools } from './access/panelTools';
 import { ActivityLog } from './activity/ActivityLog';
+import { AgentService, agentName } from './agents/AgentService';
 import { ArchitectureService } from './architecture/ArchitectureService';
 import { CodeService } from './code/CodeService';
 import { collectManifestEntries, ManifestTracker, renderManifest } from './claude/manifest';
@@ -199,12 +202,26 @@ function manifestEntries(terminalId: string) {
 }
 
 /** Manifest for a hook; inline contents count as reads through their arrows. */
+// Messages between agents (M8): the arrows between Claude terminals decide who may write to whom.
+const agents = new AgentService({
+  panels: () => workspace.panels(),
+  connections: () => workspace.connections(),
+  onMessage: (message) => send(IpcChannels.agentMessage, message),
+});
+
+/** Names of the agents a terminal may message and of the ones that may message it. */
+function agentNames(terminalId: string) {
+  const { to, from } = agentLinks(terminalId, workspace.panels(), workspace.connections());
+  return { to: to.map(agentName), from: from.map(agentName) };
+}
+
 async function manifestFor(terminalId: string, moment: 'start' | 'prompt'): Promise<string | null> {
   const entries = await manifestEntries(terminalId);
+  const names = agentNames(terminalId);
   const text =
     moment === 'start'
-      ? manifests.sessionStart(terminalId, entries)
-      : manifests.prompt(terminalId, entries);
+      ? manifests.sessionStart(terminalId, entries, names)
+      : manifests.prompt(terminalId, entries, names);
   if (text) {
     for (const entry of entries) {
       if (entry.content === undefined) continue;
@@ -276,7 +293,8 @@ const server = new LocalServer({
       appendActivity: (id, entry) => activity.append(id, entry),
       updateTool: (id, useId, patch) => activity.updateTool(id, useId, patch),
       manifest: manifestFor,
-      checkFileWrite: async (id, toolName, toolInput, cwd) => {
+      checkTool: async (id, toolName, toolInput, cwd) => {
+        if (toolName === 'SendMessage') return agents.checkSend(id, toolInput);
         const decision = await accessService.checkFileWrite(id, toolName, toolInput, cwd);
         if (decision.decision === 'deny') return decision.reason;
         if (decision.decision === 'allow') markdown.expectClaudeWrite(decision.path, id);
@@ -284,6 +302,8 @@ const server = new LocalServer({
       },
       settleTools: (id) => activity.settleRunning(id),
       fileTouched: (id, tool, path, cwd) => void code.touched(id, tool, path, cwd),
+      toolDone: (id, tool, input, response) => agents.toolDone(id, tool, input, response),
+      setMessagingAddress: (id, address) => agents.setAddress(id, address),
       needsAttention: notifyAttention,
     }),
   createMcpServer: (terminalId) =>
@@ -340,6 +360,7 @@ workspace.onChange((change) => {
     server.revoke(id);
     void activity.remove(id);
     void code.watch(id, null);
+    agents.forget(id);
   }
 });
 workspace.onBeforeClose(() => {
@@ -349,6 +370,7 @@ workspace.onBeforeClose(() => {
   connectionLog.reset();
   code.reset();
   git.forget();
+  agents.reset();
   return folders.reset();
 });
 workspace.onChange((change, panels) => void architecture.boardChanged(change, panels));
@@ -684,6 +706,10 @@ function registerIpc(): void {
     if (!parsed.success) return { ok: false, message: 'Richiesta non valida' } as const;
     return markdown.undo(parsed.data.id);
   });
+  ipcMain.handle(IpcChannels.agentHistory, (_event, payload: unknown) => {
+    const parsed = agentHistorySchema.safeParse(payload);
+    return parsed.success ? agents.between(parsed.data.a, parsed.data.b) : [];
+  });
   ipcMain.handle(IpcChannels.codeFeed, () => code.list());
   ipcMain.handle(IpcChannels.codeRead, (_event, payload: unknown) => {
     const parsed = codeFileSchema.parse(payload);
@@ -752,7 +778,7 @@ function registerIpc(): void {
   ipcMain.handle(IpcChannels.manifestPreview, async (_event, payload: unknown) => {
     const parsed = panelIdPayloadSchema.safeParse(payload);
     if (!parsed.success) return '';
-    return renderManifest(await manifestEntries(parsed.data.id));
+    return renderManifest(await manifestEntries(parsed.data.id), [], agentNames(parsed.data.id));
   });
   ipcMain.handle(IpcChannels.activityList, (_event, payload: unknown) => {
     const parsed = terminalIdPayloadSchema.safeParse(payload);

@@ -33,13 +33,7 @@ export function isConnectable(panel: Panel | undefined): boolean {
 }
 
 export type ConnectionRejection =
-  | 'unknown-panel'
-  | 'same-panel'
-  | 'code-panel'
-  | 'shell-terminal'
-  | 'multi-agent'
-  | 'data-to-data'
-  | 'duplicate';
+  'unknown-panel' | 'same-panel' | 'code-panel' | 'shell-terminal' | 'data-to-data' | 'duplicate';
 
 export type ConnectionCheck =
   { ok: true } | { ok: false; reason: ConnectionRejection; message: string };
@@ -49,7 +43,6 @@ const REJECTION_MESSAGES: Record<ConnectionRejection, string> = {
   'same-panel': 'Un panel non si collega a sé stesso',
   'code-panel': 'Il panel Codice non si collega: segue gli agenti da solo',
   'shell-terminal': 'Solo i terminali Claude si possono collegare',
-  'multi-agent': 'Multi-agente: in arrivo',
   'data-to-data': 'Collega un panel a un terminale Claude',
   duplicate: 'Questo collegamento esiste già',
 };
@@ -70,7 +63,6 @@ export function checkConnection(
   for (const p of [source, target]) {
     if (p.type === 'terminal' && p.mode === 'shell') return reject('shell-terminal');
   }
-  if (isClaudeTerminal(source) && isClaudeTerminal(target)) return reject('multi-agent');
   if (!isClaudeTerminal(source) && !isClaudeTerminal(target)) return reject('data-to-data');
   if (connections.some((c) => c.source === source.id && c.target === target.id)) {
     return reject('duplicate');
@@ -100,6 +92,8 @@ export function wirePairs(panels: Panel[], connections: Connection[]): WirePair[
   for (const c of connections) {
     const source = byId.get(c.source);
     const target = byId.get(c.target);
+    // Claude → Claude arrows are messages between agents: see agentPairs.
+    if (isClaudeTerminal(source) && isClaudeTerminal(target)) continue;
     const terminal = isClaudeTerminal(source) ? source : isClaudeTerminal(target) ? target : null;
     if (!terminal) continue;
     const panelId = terminal.id === c.source ? c.target : c.source;
@@ -118,6 +112,58 @@ export function wirePairs(panels: Panel[], connections: Connection[]): WirePair[
     pairs.set(key, pair);
   }
   return [...pairs.values()];
+}
+
+/** Two Claude terminals with one or two arrows between them (M8): who may message whom. */
+export interface AgentPair {
+  /** Stable key: `agents:<a>|<b>`, ids in sorted order. */
+  key: string;
+  a: string;
+  b: string;
+  /** a may message b. */
+  aToB: boolean;
+  /** b may message a. */
+  bToA: boolean;
+  connectionIds: string[];
+}
+
+export function agentPairKey(x: string, y: string): string {
+  const [a, b] = [x, y].sort();
+  return `agents:${a}|${b}`;
+}
+
+/** Groups Claude → Claude arrows by pair of terminals (both ways = one wire). */
+export function agentPairs(panels: Panel[], connections: Connection[]): AgentPair[] {
+  const byId = new Map(panels.map((p) => [p.id, p]));
+  const pairs = new Map<string, AgentPair>();
+  for (const c of connections) {
+    if (!isClaudeTerminal(byId.get(c.source)) || !isClaudeTerminal(byId.get(c.target))) continue;
+    const [a, b] = [c.source, c.target].sort() as [string, string];
+    const key = agentPairKey(a, b);
+    const pair = pairs.get(key) ?? { key, a, b, aToB: false, bToA: false, connectionIds: [] };
+    if (c.source === a) pair.aToB = true;
+    else pair.bToA = true;
+    pair.connectionIds.push(c.id);
+    pairs.set(key, pair);
+  }
+  return [...pairs.values()];
+}
+
+/** The agents a Claude terminal may message, and the ones that may message it (M8). */
+export function agentLinks(
+  terminalId: string,
+  panels: Panel[],
+  connections: Connection[],
+): { to: TerminalPanel[]; from: TerminalPanel[] } {
+  const claude = new Map(panels.filter(isClaudeTerminal).map((p) => [p.id, p] as const));
+  if (!claude.has(terminalId)) return { to: [], from: [] };
+  const to = connections
+    .filter((c) => c.source === terminalId && claude.has(c.target))
+    .map((c) => claude.get(c.target) as TerminalPanel);
+  const from = connections
+    .filter((c) => c.target === terminalId && claude.has(c.source))
+    .map((c) => claude.get(c.source) as TerminalPanel);
+  return { to, from };
 }
 
 export interface ConnectedPanel {

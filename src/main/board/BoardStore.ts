@@ -133,9 +133,10 @@ export class BoardStore {
     return version;
   }
 
-  setClaudeSessionId(id: string, sessionId: string): void {
+  setClaudeSessionId(id: string, sessionId: string, name?: string): void {
     const panel = this.requireTerminal(this.board, id);
-    this.commit(this.replacePanel(this.board, { ...panel, claudeSessionId: sessionId }), {
+    const named = name === undefined ? {} : { claudeName: name };
+    this.commit(this.replacePanel(this.board, { ...panel, claudeSessionId: sessionId, ...named }), {
       type: 'claudeSession',
       id,
     });
@@ -248,7 +249,7 @@ export class BoardStore {
         if (terminal.mode === intent.mode) return board;
         // A different program starts from scratch: no session to resume.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { claudeSessionId, ...rest } = terminal;
+        const { claudeSessionId, claudeName, ...rest } = terminal;
         const next = this.replacePanel(board, {
           ...rest,
           mode: intent.mode,
@@ -353,7 +354,7 @@ export class BoardStore {
     if (source.type === 'terminal') {
       // A copy never inherits the Claude session: it starts its own.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { claudeSessionId, ...rest } = source;
+      const { claudeSessionId, claudeName, ...rest } = source;
       return { ...rest, ...common, status: 'not-started' };
     }
     return { ...source, ...common };

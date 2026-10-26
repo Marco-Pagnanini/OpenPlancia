@@ -61,6 +61,9 @@ export const IpcChannels = {
   codeFeedChanged: 'plancia:code:feed-changed',
   /** main → renderer: a file shown by a Code panel changed on disk. */
   codeFileChanged: 'plancia:code:file-changed',
+  agentHistory: 'plancia:agents:history',
+  /** main → renderer: one agent messaged another through an arrow (M8). */
+  agentMessage: 'plancia:agents:message',
   activityList: 'plancia:activity:list',
   /** main → renderer: an activity entry was added or updated. */
   activityEvent: 'plancia:activity:event',
@@ -191,6 +194,20 @@ export type ArchitectureWriteResult =
 
 export type ArchitectureUndoResult = MarkdownUndoResult;
 
+/** A message one Claude terminal sent another with SendMessage (M8). */
+export interface AgentMessage {
+  from: string;
+  to: string;
+  /** ISO timestamp. */
+  at: string;
+  /** Claude's one-line summary, when given. */
+  summary?: string | undefined;
+  /** The message, cut to a few thousand characters. */
+  text: string;
+  /** Full length of the message. */
+  chars: number;
+}
+
 /** A file changed by Claude (from PostToolUse), for the Code panels (M7). */
 export interface CodeFeedEntry {
   /** Relative to the project, with "/" separators. */
@@ -289,6 +306,11 @@ export interface PlanciaApi {
     onChanged(listener: (event: MarkdownChangedEvent) => void): () => void;
     /** Restores the content before Claude's last write. */
     undo(id: string): Promise<MarkdownUndoResult>;
+  };
+  agents: {
+    /** Messages between two terminals, oldest first. */
+    history(a: string, b: string): Promise<AgentMessage[]>;
+    onMessage(listener: (message: AgentMessage) => void): () => void;
   };
   code: {
     feed(): Promise<CodeFeedEntry[]>;
