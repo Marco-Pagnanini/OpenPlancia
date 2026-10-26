@@ -541,7 +541,7 @@ plancia/
 - [x] **TypeScript fissato a ~6.0** invece di 7.x: typescript-eslint 8.72 supporta solo TS < 6.1. Da rivalutare quando typescript-eslint supporterà TS 7. In TS 6 `baseUrl` è deprecato: i `paths` sono relativi al tsconfig. (M0)
 - [x] **Preload in CJS** (`out/preload/index.cjs`): con `sandbox: true` il preload non può essere un modulo ES. Main e renderer restano ESM. (M0)
 - [x] Con npm 10.9 lo script di install di `electron` in un caso non ha scaricato il binario (`Error: Electron uninstall` su `npm run dev`). Rimedio: `node node_modules/electron/install.js`. Documentato nel README. (M0)
-- [x] **Logo**: mascotte (struzzo arancione) fornita dall'utente. `resources/icon.png` (icona app, 1024 px su quadrato arrotondato) e `src/renderer/assets/logo.png` (trasparente, 512 px). (M1)
+- [x] **Logo**: mascotte (testa di struzzo arancione, seconda versione) fornita dall'utente. `resources/icon.png` (icona app, 1024 px su quadrato arrotondato) e `src/renderer/assets/logo.png` (trasparente, 512 px). (M1)
 - [x] **Stato transitorio nel renderer**: durante trascinamento e ridimensionamento React Flow aggiorna posizione e dimensione in locale per fluidità; a fine gesto il renderer invia l'intento (`movePanels`, `resizePanel`) e il main rimanda lo snapshot autorevole. Selezione e drag in corso restano solo UI. (M1)
 - [x] **Viewport salvato** in `board.json` (`viewport`, opzionale): non era nella spec ma serve a ritrovare lo "stesso layout". L'intento `setViewport` salva ma non rimanda lo snapshot. (M1)
 - [x] **Panel Markdown segnaposto**: in M1 punta a `AGENTS.md` senza creare il file; in M4 "Nuovo file markdown" / "Apri markdown" sostituiscono questo default. (M1)
