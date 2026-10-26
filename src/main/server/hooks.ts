@@ -18,7 +18,8 @@ export interface HookDeps {
   /** Called when Claude needs the user (permission, question). */
   needsAttention(id: string, message: string): void;
   /** Manifest to inject now, or null (spec §7.4). */
-  manifest(id: string, moment: 'start' | 'prompt'): Promise<string | null>;
+  /** At `tool` (PostToolUse) only changes since the last injection are sent, and only if any. */
+  manifest(id: string, moment: 'start' | 'prompt' | 'tool'): Promise<string | null>;
   /**
    * Denial reason when the arrows forbid this tool call, else null: a file write without a
    * write arrow (spec §7.5), a message to an agent without an arrow (M8).
@@ -62,7 +63,10 @@ function clip(text: string | undefined, max: number): string | undefined {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
-function context(event: 'SessionStart' | 'UserPromptSubmit', text: string | null): HookResponse {
+function context(
+  event: 'SessionStart' | 'UserPromptSubmit' | 'PostToolUse',
+  text: string | null,
+): HookResponse {
   return text ? { hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
 }
 
@@ -161,7 +165,8 @@ export async function handleHook(
           detail: clip(hook.error, 400),
         });
       }
-      return null;
+      // Arrows or panels changed during the turn reach Claude now, not at the next prompt.
+      return failed ? null : context('PostToolUse', await deps.manifest(terminalId, 'tool'));
     }
     case 'PermissionDenied': {
       if (hook.tool_use_id) deps.updateTool(terminalId, hook.tool_use_id, { state: 'failed' });

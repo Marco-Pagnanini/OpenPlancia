@@ -33,6 +33,7 @@ const api: PlanciaApi = {
     close: () => ipcRenderer.invoke(IpcChannels.workspaceClose),
     recent: () => ipcRenderer.invoke(IpcChannels.workspaceRecent),
     openRecent: (path) => ipcRenderer.invoke(IpcChannels.workspaceOpenRecent, { path }),
+    sync: () => ipcRenderer.invoke(IpcChannels.workspaceSync),
   },
   board: {
     dispatch: (intent) => ipcRenderer.invoke(IpcChannels.boardDispatch, intent),

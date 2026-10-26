@@ -173,10 +173,10 @@ describe('what each agent is told (manifest)', () => {
   it('injects again when the arrows between agents change', () => {
     const tracker = new ManifestTracker();
     expect(tracker.sessionStart('t1', [], { to: [], from: [] })).toBeNull();
-    expect(tracker.prompt('t1', [], { to: [], from: [] })).toBeNull();
-    const text = tracker.prompt('t1', [], { to: ['Claude 2'], from: [] });
+    expect(tracker.update('t1', [], { to: [], from: [] })).toBeNull();
+    const text = tracker.update('t1', [], { to: ['Claude 2'], from: [] });
     expect(text).toContain('Modificato dall\'ultimo messaggio: ora puoi scrivere a "Claude 2"');
-    expect(tracker.prompt('t1', [], { to: ['Claude 2'], from: [] })).toBeNull();
+    expect(tracker.update('t1', [], { to: ['Claude 2'], from: [] })).toBeNull();
     expect(describeAgentChanges({ to: ['a'], from: ['b'] }, { to: [], from: [] })).toEqual([
       'non puoi più scrivere a "a"',
       '"b" non può più scriverti',

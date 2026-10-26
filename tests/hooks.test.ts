@@ -26,7 +26,11 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
   const sessions: string[] = [];
   let settled = 0;
   const touched: string[] = [];
-  const manifests: Record<'start' | 'prompt', string | null> = { start: null, prompt: null };
+  const manifests: Record<'start' | 'prompt' | 'tool', string | null> = {
+    start: null,
+    prompt: null,
+    tool: null,
+  };
   const deny =
     "Accesso negato: il panel 'AGENTS.md' è collegato a questo terminale in sola lettura.";
   const deps: HookDeps = {
@@ -217,6 +221,20 @@ describe('handleHook — arrows (M5)', () => {
         additionalContext: "Modificato dall'ultimo messaggio: …",
       },
     });
+  });
+
+  it('after a tool, tells Claude what changed meanwhile (not after a failed tool)', async () => {
+    const t = setup();
+    const post = (event: string) => t.fire({ hook_event_name: event, tool_name: 'Bash' });
+    expect(await post('PostToolUse')).toBeNull();
+    t.manifests.tool = 'Modificato dall\'ultimo messaggio: ora puoi scrivere a "Claude 2"';
+    expect(await post('PostToolUse')).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: 'Modificato dall\'ultimo messaggio: ora puoi scrivere a "Claude 2"',
+      },
+    });
+    expect(await post('PostToolUseFailure')).toBeNull();
   });
 
   it('denies file writes the arrows do not allow, with the reason', async () => {

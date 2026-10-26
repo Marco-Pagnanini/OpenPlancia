@@ -12,7 +12,7 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-227%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/test-230%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
 [![Stato](https://img.shields.io/badge/stato-MVP%20completo-2EA44F?style=flat-square)](#%EF%B8%8F-roadmap)
 
 [Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
@@ -211,7 +211,7 @@ Il risparmio più grande però non dipende dal formato, ma da **quando** e **cos
 
 - **Solo i panel collegati** entrano nel contesto, non l'intero progetto.
 - Per una **cartella** entra l'indice dei file (percorso, titolo, versione: ~50 caratteri a file) più i file piccoli; gli altri Claude li legge solo se gli servono. Un file presente in due cartelle collegate entra una volta sola.
-- Il contenuto viene mandato **all'avvio della sessione e poi solo se cambia** (la versione del panel è aumentata o le frecce sono cambiate). Se scrivi dieci messaggi senza toccare il diagramma, Claude lo riceve una volta sola.
+- Il contenuto viene mandato **all'avvio della sessione e poi solo se cambia** (la versione del panel è aumentata o le frecce sono cambiate), al messaggio successivo o già dopo il prossimo tool. Se scrivi dieci messaggi senza toccare il diagramma, Claude lo riceve una volta sola. Il pulsante **Sync** in alto lo fa rimandare intero a tutti gli agenti.
 - Oltre i 9.000 caratteri di contesto, i panel più grandi restano fuori e Claude li legge con `read_panel` solo se gli servono.
 
 ## 🚀 Avvio rapido
