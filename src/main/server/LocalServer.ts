@@ -5,7 +5,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 export interface LocalServerOptions {
-  onHook: (terminalId: string, body: unknown) => Record<string, unknown> | null;
+  onHook: (
+    terminalId: string,
+    body: unknown,
+  ) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>;
   createMcpServer: (terminalId: string) => McpServer;
 }
 
@@ -138,7 +141,7 @@ export class LocalServer {
     const body = parseJson(await readBody(req));
     let reply: Record<string, unknown> | null = null;
     try {
-      reply = this.options.onHook(terminalId, body);
+      reply = await this.options.onHook(terminalId, body);
     } catch (err) {
       // A Plancia bug must never block Claude: answer 2xx with no decision.
       console.error('[hooks] errore nella gestione dell’evento', err);

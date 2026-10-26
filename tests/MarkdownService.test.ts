@@ -47,7 +47,7 @@ function setup(initial: MarkdownPanel[]) {
       },
     },
     watch: (paths) => watched.push(paths),
-    onExternalChange: (id, doc) => external.push([id, doc]),
+    onExternalChange: (id, change) => external.push([id, change.doc]),
   });
   const version = (id: string) => panels.find((p) => p.id === id)!.version;
   return { service, watched, external, version };
@@ -60,6 +60,7 @@ describe('MarkdownService', () => {
       content: '# Regole\n- usa sempre pnpm\n',
       version: 1,
       exists: true,
+      canUndo: false,
     });
   });
 
@@ -82,7 +83,7 @@ describe('MarkdownService', () => {
     expect(stale).toEqual({
       ok: false,
       code: 'conflict',
-      doc: { content: 'v2', version: 2, exists: true },
+      doc: { content: 'v2', version: 2, exists: true, canUndo: false },
     });
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toBe('v2');
   });
@@ -103,8 +104,14 @@ describe('MarkdownService', () => {
     await writeFile(join(root, 'AGENTS.md'), '# Regole\n- usa sempre bun\n');
     await t.service.fileChanged(join(root, 'AGENTS.md'));
     expect(t.external).toEqual([
-      ['md-1', { content: '# Regole\n- usa sempre bun\n', version: 2, exists: true }],
-      ['md-2', { content: '# Regole\n- usa sempre bun\n', version: 6, exists: true }],
+      [
+        'md-1',
+        { content: '# Regole\n- usa sempre bun\n', version: 2, exists: true, canUndo: false },
+      ],
+      [
+        'md-2',
+        { content: '# Regole\n- usa sempre bun\n', version: 6, exists: true, canUndo: false },
+      ],
     ]);
   });
 
@@ -114,7 +121,9 @@ describe('MarkdownService', () => {
     await t.service.read('md-1');
     await rm(join(root, 'AGENTS.md'));
     await t.service.fileChanged(join(root, 'AGENTS.md'));
-    expect(t.external).toEqual([['md-1', { content: '', version: 2, exists: false }]]);
+    expect(t.external).toEqual([
+      ['md-1', { content: '', version: 2, exists: false, canUndo: false }],
+    ]);
   });
 
   it('watches only files inside the workspace', async () => {

@@ -3,7 +3,13 @@ import { basename } from 'node:path';
 import { z } from 'zod';
 import type { DispatchResult } from '@shared/ipc';
 import { boardIntentSchema } from '@shared/schemas';
-import type { AgentStatus, Panel, TerminalRuntime, WorkspaceSnapshot } from '@shared/types';
+import type {
+  AgentStatus,
+  Connection,
+  Panel,
+  TerminalRuntime,
+  WorkspaceSnapshot,
+} from '@shared/types';
 import { BoardStore, fromPersisted, toPersisted, type BoardChange } from '../board/BoardStore';
 import { loadSettings, saveSettings } from '../settings/AppSettings';
 import { createDebouncedTask, type DebouncedTask } from '../util/debounce';
@@ -63,6 +69,10 @@ export class WorkspaceService {
 
   panels(): Panel[] {
     return this.current?.store.getBoard().panels ?? [];
+  }
+
+  connections(): Connection[] {
+    return this.current?.store.getBoard().connections ?? [];
   }
 
   /** Records a content change of a panel; returns the new version. */

@@ -17,6 +17,15 @@ export interface HookDeps {
   settleTools(id: string): void;
   /** Called when Claude needs the user (permission, question). */
   needsAttention(id: string, message: string): void;
+  /** Manifest to inject now, or null (spec §7.4). */
+  manifest(id: string, moment: 'start' | 'prompt'): Promise<string | null>;
+  /** Denial reason when the arrows forbid this file write (spec §7.5), else null. */
+  checkFileWrite(
+    id: string,
+    toolName: string,
+    toolInput: Record<string, unknown> | undefined,
+    cwd: string | undefined,
+  ): Promise<string | null>;
 }
 
 /** JSON body returned to Claude Code; null means "200 with an empty body". */
@@ -39,11 +48,19 @@ function clip(text: string | undefined, max: number): string | undefined {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
+function context(event: 'SessionStart' | 'UserPromptSubmit', text: string | null): HookResponse {
+  return text ? { hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
+}
+
 /**
- * Turns one hook request into state changes. Pure apart from `deps`, synchronous and cheap so
- * the HTTP answer goes back well within Claude Code's budget. Never throws on bad input.
+ * Turns one hook request into state changes and, where needed, a decision for Claude Code.
+ * Cheap enough to answer well within the hook budget. Never throws on bad input.
  */
-export function handleHook(terminalId: string, body: unknown, deps: HookDeps): HookResponse {
+export async function handleHook(
+  terminalId: string,
+  body: unknown,
+  deps: HookDeps,
+): Promise<HookResponse> {
   const parsed = hookPayloadSchema.safeParse(body);
   const terminal = deps.terminal(terminalId);
   if (!parsed.success || !terminal || terminal.mode !== 'claude') return null;
@@ -60,7 +77,7 @@ export function handleHook(terminalId: string, body: unknown, deps: HookDeps): H
       const how =
         hook.source === 'resume' ? 'ripresa' : hook.source === 'clear' ? 'azzerata' : 'avviata';
       deps.appendActivity(terminalId, { kind: 'session', title: `Sessione ${how}` });
-      return null;
+      return context('SessionStart', await deps.manifest(terminalId, 'start'));
     }
     case 'UserPromptSubmit':
       deps.setRuntime(terminalId, { status: 'working', currentTool: undefined });
@@ -69,22 +86,37 @@ export function handleHook(terminalId: string, body: unknown, deps: HookDeps): H
         title: 'Prompt inviato',
         detail: clip(hook.prompt, 400),
       });
-      return null;
+      return context('UserPromptSubmit', await deps.manifest(terminalId, 'prompt'));
     case 'PreToolUse': {
       const name = hook.tool_name ?? 'Tool';
       const label = toolLabel(name, hook.tool_input, root);
       const path = toolFilePath(hook.tool_input);
-      deps.setRuntime(terminalId, { status: 'working', currentTool: label });
+      const denied = await deps.checkFileWrite(terminalId, name, hook.tool_input, hook.cwd);
       deps.appendActivity(terminalId, {
         kind: 'tool',
         title: label,
         tool: {
           name,
           useId: hook.tool_use_id,
-          state: 'running',
+          state: denied ? 'failed' : 'running',
           filePath: path ? displayPath(path, root) : undefined,
         },
       });
+      if (denied) {
+        deps.appendActivity(terminalId, {
+          kind: 'error',
+          title: 'Scrittura negata dalle frecce',
+          detail: denied,
+        });
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason: denied,
+          },
+        };
+      }
+      deps.setRuntime(terminalId, { status: 'working', currentTool: label });
       return null;
     }
     case 'PostToolUse':

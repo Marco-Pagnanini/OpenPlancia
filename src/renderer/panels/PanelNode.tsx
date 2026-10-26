@@ -1,4 +1,11 @@
-import { CornersOutIcon, DotsThreeIcon, ListBulletsIcon, XIcon } from '@phosphor-icons/react';
+import {
+  CornersOutIcon,
+  DotsThreeIcon,
+  DownloadSimpleIcon,
+  ListBulletsIcon,
+  UploadSimpleIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 import { memo, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import { NodeResizer, useStore, type NodeProps } from '@xyflow/react';
 import { MIN_PANEL_SIZE } from '@shared/panels';
@@ -7,6 +14,7 @@ import { useUiStore } from '../stores/uiStore';
 import { PANEL_DRAG_HANDLE, useWorkspaceStore, type PanelNode } from '../stores/workspaceStore';
 import { PanelIcon } from './PanelIcon';
 import { PanelPlaceholder } from './PanelPlaceholder';
+import { Ports } from './Ports';
 import { confirmDelete, panelKindLabel } from './panelMeta';
 import { MarkdownBody } from './markdown/MarkdownBody';
 import { StatusBadge } from './StatusBadge';
@@ -68,6 +76,16 @@ function PanelMenu({ panel, onRename }: { panel: Panel; onRename: () => void }) 
           <button type="button" role="menuitem" className={item} onClick={run(() => setFocus(id))}>
             Modalità focus
           </button>
+          {panel.type === 'terminal' && panel.mode === 'claude' && (
+            <button
+              type="button"
+              role="menuitem"
+              className={item}
+              onClick={run(() => useUiStore.getState().setManifestFor(id))}
+            >
+              Cosa vede Claude
+            </button>
+          )}
           <button type="button" role="menuitem" className={item} onClick={run(onRename)}>
             Rinomina
           </button>
@@ -153,12 +171,35 @@ export function PanelContent({ panel, variant }: { panel: Panel; variant: 'panel
 }
 
 /** Current tool and the "Attività" button, for Claude terminals. */
+/** "📥 2 📤 1": panels this Claude reads and writes (spec §6). */
+function ConnectionBadge({ id }: { id: string }) {
+  const reads = useWorkspaceStore(
+    (s) => s.snapshot?.board.connections.filter((c) => c.target === id).length ?? 0,
+  );
+  const writes = useWorkspaceStore(
+    (s) => s.snapshot?.board.connections.filter((c) => c.source === id).length ?? 0,
+  );
+  if (reads + writes === 0) return null;
+  return (
+    <span
+      title={`${reads} panel in lettura · ${writes} in scrittura`}
+      className="flex shrink-0 items-center gap-1.5 rounded-full bg-hover px-2 py-[3px] font-mono text-[11px] text-ink-3"
+    >
+      <DownloadSimpleIcon size={12} className="text-[#8fa9c9]" />
+      {reads}
+      <UploadSimpleIcon size={12} className="text-[#e0b97e]" />
+      {writes}
+    </span>
+  );
+}
+
 export function ClaudeHeaderExtras({ panel }: { panel: Panel }) {
   const setActivity = useUiStore((s) => s.setActivity);
   const open = useUiStore((s) => s.activityId === panel.id);
   if (panel.type !== 'terminal' || panel.mode !== 'claude') return null;
   return (
     <>
+      <ConnectionBadge id={panel.id} />
       {panel.currentTool && panel.status === 'working' && (
         <span
           className="min-w-0 shrink truncate font-mono text-[11px] text-ink-3"
@@ -186,6 +227,9 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
   const dispatch = useWorkspaceStore((s) => s.dispatch);
   const hand = useUiStore((s) => s.tool === 'hand');
   const setFocus = useUiStore((s) => s.setFocus);
+  const linked = useWorkspaceStore(
+    (s) => s.snapshot?.board.connections.some((c) => c.source === id || c.target === id) ?? false,
+  );
   const [renaming, setRenaming] = useState(false);
 
   const finishRename = (next: string | null) => {
@@ -202,6 +246,7 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
           : 'border-line shadow-[0_14px_40px_rgba(0,0,0,.4)]'
       }`}
     >
+      <Ports panel={panel} linked={linked} />
       <NodeResizer
         isVisible={selected && !hand}
         minWidth={MIN_PANEL_SIZE.width}

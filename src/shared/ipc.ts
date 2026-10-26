@@ -27,6 +27,11 @@ export const IpcChannels = {
   markdownCreate: 'plancia:markdown:create',
   markdownRead: 'plancia:markdown:read',
   markdownWrite: 'plancia:markdown:write',
+  markdownUndo: 'plancia:markdown:undo',
+  connectionHistory: 'plancia:connection:history',
+  /** main → renderer: an arrow was used (read or write). */
+  connectionUsed: 'plancia:connection:used',
+  manifestPreview: 'plancia:manifest:preview',
   /** main → renderer: a markdown file changed outside the panel. */
   markdownChanged: 'plancia:markdown:changed',
   activityList: 'plancia:activity:list',
@@ -91,11 +96,34 @@ export interface MarkdownDoc {
   /** Panel content version (spec §5): +1 on every change, from the panel or from outside. */
   version: number;
   exists: boolean;
+  /** A previous version written over by Claude can be restored ("Annulla"). */
+  canUndo: boolean;
 }
 
 export interface MarkdownChangedEvent extends MarkdownDoc {
   id: string;
+  /** Terminal whose Claude made this change, if any (the panel flashes and offers "Annulla"). */
+  author?: string | undefined;
+  /** This change restored a previous version. */
+  undone?: boolean | undefined;
 }
+
+/** One read or write through an arrow (spec §9, arrow inspector). */
+export interface ConnectionUse {
+  terminalId: string;
+  panelId: string;
+  kind: 'read' | 'write';
+  /** manifest = inline in the injected context; tool = Claude's own Edit/Write. */
+  via: 'manifest' | 'read_panel' | 'write_panel' | 'tool';
+  /** ISO timestamp. */
+  at: string;
+  version: number;
+  chars: number;
+  /** Start of the payload, for the inspector. */
+  preview: string;
+}
+
+export type MarkdownUndoResult = { ok: true; version: number } | { ok: false; message: string };
 
 export type MarkdownCreateResult =
   | { status: 'created'; panelId: string }
@@ -142,6 +170,14 @@ export interface PlanciaApi {
     read(id: string): Promise<MarkdownDoc>;
     write(id: string, content: string, baseVersion: number): Promise<MarkdownWriteResult>;
     onChanged(listener: (event: MarkdownChangedEvent) => void): () => void;
+    /** Restores the content before Claude's last write. */
+    undo(id: string): Promise<MarkdownUndoResult>;
+  };
+  connections: {
+    history(terminalId: string, panelId: string): Promise<ConnectionUse[]>;
+    onUsed(listener: (use: ConnectionUse) => void): () => void;
+    /** The manifest exactly as it would be injected now ("Cosa vede Claude"). */
+    manifest(terminalId: string): Promise<string>;
   };
   activity: {
     list(terminalId: string): Promise<ActivityEvent[]>;

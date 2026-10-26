@@ -4,6 +4,7 @@ import { Canvas } from './canvas/Canvas';
 import { EmptyState } from './components/EmptyState';
 import { ErrorToast } from './components/ErrorToast';
 import { useActivityStore } from './stores/activityStore';
+import { useConnectionStore } from './stores/connectionStore';
 import { useMarkdownStore } from './stores/markdownStore';
 import { useTerminalStore } from './stores/terminalStore';
 import { useWorkspaceStore } from './stores/workspaceStore';
@@ -17,6 +18,7 @@ export function App() {
   useEffect(() => useTerminalStore.getState().init(), []);
   useEffect(() => useActivityStore.getState().init(), []);
   useEffect(() => useMarkdownStore.getState().init(), []);
+  useEffect(() => useConnectionStore.getState().init(), []);
 
   if (!loaded) return null;
 

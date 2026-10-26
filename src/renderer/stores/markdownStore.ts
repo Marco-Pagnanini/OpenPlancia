@@ -15,6 +15,8 @@ interface MarkdownState {
   errors: Record<string, string>;
   /** The file changed on disk while the panel had unsaved edits. */
   conflicts: Record<string, true>;
+  /** Last change made by Claude, per panel: the panel flashes and offers "Annulla". */
+  claudeEdits: Record<string, { author: string; at: number }>;
   init(): () => void;
   load(id: string): Promise<void>;
   edit(id: string, content: string): void;
@@ -24,6 +26,9 @@ interface MarkdownState {
   discardDraft(id: string): void;
   /** Conflict resolution: write local edits over the file. */
   keepDraft(id: string): Promise<void>;
+  /** Restores the content before Claude's last write. */
+  undo(id: string): Promise<void>;
+  dismissClaudeEdit(id: string): void;
 }
 
 function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -46,7 +51,15 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
         // Keep typing that happened during the write as a draft.
         const stillDirty = s.drafts[id] !== undefined && s.drafts[id] !== content;
         return {
-          docs: { ...s.docs, [id]: { content, version: result.version, exists: true } },
+          docs: {
+            ...s.docs,
+            [id]: {
+              content,
+              version: result.version,
+              exists: true,
+              canUndo: s.docs[id]?.canUndo ?? false,
+            },
+          },
           drafts: stillDirty ? s.drafts : omit(s.drafts, id),
           saveState: { ...s.saveState, [id]: stillDirty ? 'pending' : 'saved' },
           errors: omit(s.errors, id),
@@ -82,13 +95,20 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
     saveState: {},
     errors: {},
     conflicts: {},
+    claudeEdits: {},
 
     init() {
-      return window.plancia.markdown.onChanged(({ id, ...doc }) =>
+      return window.plancia.markdown.onChanged(({ id, author, undone, ...doc }) =>
         set((s) => {
           const draft = s.drafts[id];
           const conflict = draft !== undefined && draft !== doc.content;
+          const claudeEdits = author
+            ? { ...s.claudeEdits, [id]: { author, at: Date.now() } }
+            : undone
+              ? omit(s.claudeEdits, id)
+              : s.claudeEdits;
           return {
+            claudeEdits,
             docs: { ...s.docs, [id]: doc },
             // No local edits: the panel simply shows the new content.
             drafts: conflict ? s.drafts : omit(s.drafts, id),
@@ -132,6 +152,15 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
         conflicts: omit(s.conflicts, id),
         saveState: { ...s.saveState, [id]: 'saved' },
       }));
+    },
+
+    async undo(id) {
+      const result = await window.plancia.markdown.undo(id);
+      if (!result.ok) set((s) => ({ errors: { ...s.errors, [id]: result.message } }));
+    },
+
+    dismissClaudeEdit(id) {
+      set((s) => ({ claudeEdits: omit(s.claudeEdits, id) }));
     },
 
     async keepDraft(id) {
