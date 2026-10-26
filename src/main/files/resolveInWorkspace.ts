@@ -12,7 +12,7 @@ function isMissing(err: unknown): boolean {
 }
 
 /** realpath of the deepest existing ancestor, with the missing tail re-appended. */
-async function realpathAllowMissing(path: string): Promise<string> {
+export async function realpathAllowMissing(path: string): Promise<string> {
   const missing: string[] = [];
   let current = path;
   for (;;) {

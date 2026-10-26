@@ -216,6 +216,54 @@ describe('markdown panels', () => {
   });
 });
 
+describe('connections', () => {
+  function board() {
+    const store = makeStore(undefined, ['0001', '0002', '0003', '0004', 'c001', 'c002', 'c003']);
+    store.apply({ type: 'createPanel', panelType: 'terminal', mode: 'claude', position: at });
+    store.apply({
+      type: 'createPanel',
+      panelType: 'markdown',
+      filePath: 'AGENTS.md',
+      position: at,
+    });
+    store.apply({ type: 'createPanel', panelType: 'terminal', mode: 'shell', position: at });
+    store.apply({ type: 'createPanel', panelType: 'terminal', mode: 'claude', position: at });
+    return store;
+  }
+
+  it('adds arrows that follow the rules, with ids and timestamps', () => {
+    const store = board();
+    store.apply({ type: 'connect', source: 'md-0002', target: 'term-0001' });
+    store.apply({ type: 'connect', source: 'term-0001', target: 'md-0002' });
+    expect(store.getBoard().connections).toEqual([
+      { id: 'conn-c001', source: 'md-0002', target: 'term-0001', createdAt: NOW.toISOString() },
+      { id: 'conn-c002', source: 'term-0001', target: 'md-0002', createdAt: NOW.toISOString() },
+    ]);
+  });
+
+  it('rejects arrows the rules forbid, leaving the board untouched', () => {
+    const store = board();
+    store.apply({ type: 'connect', source: 'md-0002', target: 'term-0001' });
+    const before = store.getBoard();
+    for (const [source, target, message] of [
+      ['md-0002', 'term-0001', 'Questo collegamento esiste già'],
+      ['term-0001', 'term-0004', 'Multi-agente: in arrivo'],
+      ['md-0002', 'term-0003', 'Solo i terminali Claude si possono collegare'],
+      ['md-0002', 'nope', 'Panel inesistente'],
+    ] as const) {
+      expect(() => store.apply({ type: 'connect', source, target })).toThrow(message);
+    }
+    expect(store.getBoard()).toBe(before);
+  });
+
+  it('disconnects by id', () => {
+    const store = board();
+    store.apply({ type: 'connect', source: 'md-0002', target: 'term-0001' });
+    store.apply({ type: 'disconnect', ids: ['conn-c001', 'missing'] });
+    expect(store.getBoard().connections).toEqual([]);
+  });
+});
+
 describe('terminal runtime state', () => {
   function withTerminal() {
     const store = makeStore();

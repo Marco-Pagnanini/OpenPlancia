@@ -23,7 +23,9 @@ beforeEach(async () => {
     },
     createMcpServer: (id) =>
       createPlanciaMcpServer(id, {
-        listPanels: () => [],
+        listPanels: () => ({ ok: true, text: 'Nessun panel', data: { panels: [] } }),
+        readPanel: async (_t, panelId) => ({ ok: false, error: `Accesso negato: ${panelId}` }),
+        writePanel: async () => ({ ok: true, text: 'Scritto', data: { version: 2 } }),
         onToolCall: (terminalId, tool) => toolCalls.push(`${terminalId}:${tool}`),
       }),
   });
@@ -112,10 +114,17 @@ describe('LocalServer', () => {
     const client = new Client({ name: 'test', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(server.url('mcp', 'term-1'))));
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(['list_panels']);
+    expect(tools.map((t) => t.name)).toEqual(['list_panels', 'read_panel', 'write_panel']);
     const result = await client.callTool({ name: 'list_panels', arguments: {} });
     expect(result.structuredContent).toEqual({ panels: [] });
-    expect(toolCalls).toEqual(['term-1:list_panels']);
+    const denied = await client.callTool({ name: 'read_panel', arguments: { panelId: 'md-1' } });
+    expect(denied).toMatchObject({ isError: true, content: [{ text: 'Accesso negato: md-1' }] });
+    const written = await client.callTool({
+      name: 'write_panel',
+      arguments: { panelId: 'md-1', baseVersion: 1, content: 'x' },
+    });
+    expect(written.structuredContent).toEqual({ version: 2 });
+    expect(toolCalls).toEqual(['term-1:list_panels', 'term-1:read_panel', 'term-1:write_panel']);
     await client.close();
   });
 });

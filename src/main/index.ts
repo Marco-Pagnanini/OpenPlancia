@@ -9,6 +9,7 @@ import {
   type OpenWorkspaceResult,
 } from '@shared/ipc';
 import {
+  connectionHistorySchema,
   externalUrlSchema,
   markdownCreateSchema,
   markdownWriteSchema,
@@ -19,7 +20,11 @@ import {
   terminalWriteSchema,
 } from '@shared/schemas';
 import type { WorkspaceSnapshot } from '@shared/types';
+import { AccessService } from './access/AccessService';
+import { ConnectionLog } from './access/ConnectionLog';
+import { PanelTools } from './access/panelTools';
 import { ActivityLog } from './activity/ActivityLog';
+import { collectManifestEntries, ManifestTracker, renderManifest } from './claude/manifest';
 import {
   CLAUDE_INSTALL_URL,
   claudeVersion,
@@ -81,8 +86,70 @@ const watcher = new FileWatcher((path) => void markdown.fileChanged(path));
 const markdown: MarkdownService = new MarkdownService({
   workspace,
   watch: (paths) => watcher.setPaths(paths),
-  onExternalChange: (id, doc) => send(IpcChannels.markdownChanged, { id, ...doc }),
+  onExternalChange: (id, { doc, author, undone, viaTool }) => {
+    send(IpcChannels.markdownChanged, { id, ...doc, author, undone });
+    // Claude's own Edit/Write on a linked file counts as a write through the arrow.
+    if (author && viaTool) {
+      connectionLog.record({
+        terminalId: author,
+        panelId: id,
+        kind: 'write',
+        via: 'tool',
+        version: doc.version,
+        payload: doc.content,
+      });
+    }
+  },
 });
+
+const connectionLog = new ConnectionLog((use) => send(IpcChannels.connectionUsed, use));
+const accessService = new AccessService({
+  panels: () => workspace.panels(),
+  connections: () => workspace.connections(),
+  root: () => workspace.root(),
+  pathOf: (panel) => markdown.pathOf(panel),
+});
+const panelTools = new PanelTools({
+  access: accessService,
+  markdown,
+  log: connectionLog,
+  panel: (id) => workspace.getPanel(id),
+});
+const manifests = new ManifestTracker();
+
+function manifestEntries(terminalId: string) {
+  return collectManifestEntries(
+    terminalId,
+    workspace.panels(),
+    workspace.connections(),
+    async (panel) =>
+      panel.type === 'markdown' ? (await markdown.read(panel.id)).content : undefined,
+  );
+}
+
+/** Manifest for a hook; inline contents count as reads through their arrows. */
+async function manifestFor(terminalId: string, moment: 'start' | 'prompt'): Promise<string | null> {
+  const entries = await manifestEntries(terminalId);
+  const text =
+    moment === 'start'
+      ? manifests.sessionStart(terminalId, entries)
+      : manifests.prompt(terminalId, entries);
+  if (text) {
+    for (const entry of entries) {
+      if (entry.content === undefined) continue;
+      if (!text.includes(`=== ${entry.title} (versione ${entry.version}) ===`)) continue;
+      connectionLog.record({
+        terminalId,
+        panelId: entry.id,
+        kind: 'read',
+        via: 'manifest',
+        version: entry.version,
+        payload: entry.content,
+      });
+    }
+  }
+  return text;
+}
 
 const ptyEnv = () => loginShellEnv().then((env) => buildPtyEnv(env, app.getVersion()));
 
@@ -122,19 +189,24 @@ const server = new LocalServer({
       setSessionId: (id, sessionId) => workspace.setClaudeSessionId(id, sessionId),
       appendActivity: (id, entry) => activity.append(id, entry),
       updateTool: (id, useId, patch) => activity.updateTool(id, useId, patch),
+      manifest: manifestFor,
+      checkFileWrite: async (id, toolName, toolInput, cwd) => {
+        const decision = await accessService.checkFileWrite(id, toolName, toolInput, cwd);
+        if (decision.decision === 'deny') return decision.reason;
+        if (decision.decision === 'allow') markdown.expectClaudeWrite(decision.path, id);
+        return null;
+      },
       settleTools: (id) => activity.settleRunning(id),
       needsAttention: notifyAttention,
     }),
   createMcpServer: (terminalId) =>
     createPlanciaMcpServer(terminalId, {
-      // Connections arrive in M5: nothing is linked yet.
-      listPanels: () => [],
-      onToolCall: (id, tool) =>
-        activity.append(id, {
-          kind: 'tool',
-          title: `Plancia: ${tool}`,
-          detail: 'Nessun panel collegato',
-        }),
+      listPanels: (id) => panelTools.listPanels(id),
+      readPanel: (id, panelId) => panelTools.readPanel(id, panelId),
+      writePanel: (id, panelId, baseVersion, content, mode) =>
+        panelTools.writePanel(id, panelId, baseVersion, content, mode),
+      // The tool call itself shows up in the timeline through PreToolUse/PostToolUse.
+      onToolCall: () => undefined,
     }),
 });
 
@@ -183,6 +255,7 @@ workspace.onChange((change) => {
 workspace.onBeforeClose(() => {
   activity.reset();
   markdown.reset();
+  connectionLog.reset();
 });
 workspace.onChange((change) => {
   if (
@@ -395,6 +468,20 @@ function registerIpc(): void {
     if (!parsed.success)
       return { ok: false, code: 'error', message: 'Richiesta non valida' } as const;
     return markdown.write(parsed.data.id, parsed.data.content, parsed.data.baseVersion);
+  });
+  ipcMain.handle(IpcChannels.markdownUndo, (_event, payload: unknown) => {
+    const parsed = panelIdPayloadSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, message: 'Richiesta non valida' } as const;
+    return markdown.undo(parsed.data.id);
+  });
+  ipcMain.handle(IpcChannels.connectionHistory, (_event, payload: unknown) => {
+    const parsed = connectionHistorySchema.safeParse(payload);
+    return parsed.success ? connectionLog.list(parsed.data.terminalId, parsed.data.panelId) : [];
+  });
+  ipcMain.handle(IpcChannels.manifestPreview, async (_event, payload: unknown) => {
+    const parsed = panelIdPayloadSchema.safeParse(payload);
+    if (!parsed.success) return '';
+    return renderManifest(await manifestEntries(parsed.data.id));
   });
   ipcMain.handle(IpcChannels.activityList, (_event, payload: unknown) => {
     const parsed = terminalIdPayloadSchema.safeParse(payload);

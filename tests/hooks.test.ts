@@ -25,6 +25,9 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
   const attention: string[] = [];
   const sessions: string[] = [];
   let settled = 0;
+  const manifests: Record<'start' | 'prompt', string | null> = { start: null, prompt: null };
+  const deny =
+    "Accesso negato: il panel 'AGENTS.md' è collegato a questo terminale in sola lettura.";
   const deps: HookDeps = {
     terminal: (id) => (id === terminal.id ? terminal : undefined),
     root: () => ROOT,
@@ -38,11 +41,15 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
     settleTools: () => {
       settled++;
     },
+    manifest: async (_id, moment) => manifests[moment],
+    checkFileWrite: async (_id, tool, input) =>
+      tool === 'Edit' && input?.['file_path'] === '/repo/AGENTS.md' ? deny : null,
   };
   const fire = (body: Record<string, unknown>) =>
     handleHook('term-1', { session_id: 'sess-1', cwd: ROOT, ...body }, deps);
   return {
     fire,
+    manifests,
     activity,
     toolUpdates,
     attention,
@@ -53,12 +60,14 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
 }
 
 describe('handleHook', () => {
-  it('follows a full turn: prompt → tool → done → stop', () => {
+  it('follows a full turn: prompt → tool → done → stop', async () => {
     const t = setup();
-    expect(t.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'esegui i test' })).toBeNull();
+    expect(
+      await t.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'esegui i test' }),
+    ).toBeNull();
     expect(t.get().status).toBe('working');
 
-    t.fire({
+    await t.fire({
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
       tool_input: { command: 'npm test\necho done' },
@@ -66,11 +75,11 @@ describe('handleHook', () => {
     });
     expect(t.get()).toMatchObject({ status: 'working', currentTool: 'Bash: npm test' });
 
-    t.fire({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'toolu_1' });
+    await t.fire({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'toolu_1' });
     expect(t.get().currentTool).toBeUndefined();
     expect(t.toolUpdates).toEqual([['toolu_1', { state: 'ok' }]]);
 
-    t.fire({ hook_event_name: 'Stop', last_assistant_message: 'Tutti i test passano.' });
+    await t.fire({ hook_event_name: 'Stop', last_assistant_message: 'Tutti i test passano.' });
     expect(t.get().status).toBe('idle');
     expect(t.activity.map((a) => a.title)).toEqual([
       'Prompt inviato',
@@ -80,17 +89,17 @@ describe('handleHook', () => {
     expect(t.activity[2]?.detail).toBe('Tutti i test passano.');
   });
 
-  it('settles leftover running tools when the turn ends', () => {
+  it('settles leftover running tools when the turn ends', async () => {
     const t = setup();
-    t.fire({ hook_event_name: 'Stop' });
-    t.fire({ hook_event_name: 'StopFailure', error: 'rate_limit' });
-    t.fire({ hook_event_name: 'SessionEnd', reason: 'clear' });
+    await t.fire({ hook_event_name: 'Stop' });
+    await t.fire({ hook_event_name: 'StopFailure', error: 'rate_limit' });
+    await t.fire({ hook_event_name: 'SessionEnd', reason: 'clear' });
     expect(t.settled()).toBe(2);
   });
 
-  it('marks a tool denied by auto mode as failed', () => {
+  it('marks a tool denied by auto mode as failed', async () => {
     const t = setup();
-    t.fire({
+    await t.fire({
       hook_event_name: 'PermissionDenied',
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf build' },
@@ -101,9 +110,9 @@ describe('handleHook', () => {
     expect(t.activity[0]?.title).toBe('Permesso negato: Bash: rm -rf build');
   });
 
-  it('records file tools with a workspace-relative path', () => {
+  it('records file tools with a workspace-relative path', async () => {
     const t = setup();
-    t.fire({
+    await t.fire({
       hook_event_name: 'PreToolUse',
       tool_name: 'Edit',
       tool_input: { file_path: '/repo/src/auth.ts' },
@@ -116,9 +125,9 @@ describe('handleHook', () => {
     });
   });
 
-  it('marks failed tools and logs the error', () => {
+  it('marks failed tools and logs the error', async () => {
     const t = setup();
-    t.fire({
+    await t.fire({
       hook_event_name: 'PostToolUseFailure',
       tool_name: 'Bash',
       tool_use_id: 'toolu_3',
@@ -128,9 +137,9 @@ describe('handleHook', () => {
     expect(t.activity[0]).toMatchObject({ kind: 'error', detail: 'Exit code 1' });
   });
 
-  it('switches to needs-input on permission prompts and notifies', () => {
+  it('switches to needs-input on permission prompts and notifies', async () => {
     const t = setup({ status: 'working' });
-    t.fire({
+    await t.fire({
       hook_event_name: 'Notification',
       notification_type: 'permission_prompt',
       message: 'Claude needs your permission to use Bash',
@@ -140,40 +149,87 @@ describe('handleHook', () => {
     expect(t.attention).toEqual(['Claude needs your permission to use Bash']);
   });
 
-  it('ignores informational notifications such as idle_prompt', () => {
+  it('ignores informational notifications such as idle_prompt', async () => {
     const t = setup();
-    t.fire({ hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'x' });
+    await t.fire({
+      hook_event_name: 'Notification',
+      notification_type: 'idle_prompt',
+      message: 'x',
+    });
     expect(t.get().status).toBe('idle');
     expect(t.attention).toEqual([]);
   });
 
-  it('tracks a new session id after /clear', () => {
+  it('tracks a new session id after /clear', async () => {
     const t = setup();
-    t.fire({ hook_event_name: 'SessionStart', source: 'clear', session_id: 'sess-2' });
+    await t.fire({ hook_event_name: 'SessionStart', source: 'clear', session_id: 'sess-2' });
     expect(t.sessions).toEqual(['sess-2']);
     expect(t.activity[0]?.title).toBe('Sessione azzerata');
   });
 
-  it('marks the terminal exited only when the session really ends', () => {
+  it('marks the terminal exited only when the session really ends', async () => {
     const t = setup();
-    t.fire({ hook_event_name: 'SessionEnd', reason: 'clear' });
+    await t.fire({ hook_event_name: 'SessionEnd', reason: 'clear' });
     expect(t.get().status).toBe('idle');
-    t.fire({ hook_event_name: 'SessionEnd', reason: 'prompt_input_exit' });
+    await t.fire({ hook_event_name: 'SessionEnd', reason: 'prompt_input_exit' });
     expect(t.get().status).toBe('exited');
   });
 
-  it('ignores invalid bodies and shell terminals', () => {
+  it('ignores invalid bodies and shell terminals', async () => {
     const t = setup();
-    expect(t.fire({ prompt: 'no event name' })).toBeNull();
+    expect(await t.fire({ prompt: 'no event name' })).toBeNull();
     expect(t.get().status).toBe('idle');
     const shell = setup({ mode: 'shell' });
-    shell.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'x' });
+    await shell.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'x' });
     expect(shell.get().status).toBe('idle');
   });
 });
 
+describe('handleHook — arrows (M5)', () => {
+  it('injects the manifest at session start and on prompts when there is one', async () => {
+    const t = setup();
+    t.manifests.start = 'Plancia — panel collegati a questa sessione: …';
+    expect(await t.fire({ hook_event_name: 'SessionStart', source: 'startup' })).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: 'Plancia — panel collegati a questa sessione: …',
+      },
+    });
+    expect(await t.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'ciao' })).toBeNull();
+    t.manifests.prompt = "Modificato dall'ultimo messaggio: …";
+    expect(await t.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'ciao' })).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext: "Modificato dall'ultimo messaggio: …",
+      },
+    });
+  });
+
+  it('denies file writes the arrows do not allow, with the reason', async () => {
+    const t = setup();
+    const res = await t.fire({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Edit',
+      tool_input: { file_path: '/repo/AGENTS.md' },
+      tool_use_id: 'toolu_x',
+    });
+    expect(res).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: expect.stringContaining('sola lettura'),
+      },
+    });
+    expect(t.activity.map((a) => [a.title, a.tool?.state])).toEqual([
+      ['Edit: AGENTS.md', 'failed'],
+      ['Scrittura negata dalle frecce', undefined],
+    ]);
+    expect(t.get().currentTool).toBeUndefined();
+  });
+});
+
 describe('toolLabel', () => {
-  it('formats common tools', () => {
+  it('formats common tools', async () => {
     expect(toolLabel('Grep', { pattern: 'TODO' }, ROOT)).toBe('Grep: TODO');
     expect(toolLabel('Read', { file_path: '/elsewhere/x.md' }, ROOT)).toBe('Read: /elsewhere/x.md');
     expect(toolLabel('NotebookEdit', { notebook_path: '/repo/a.ipynb' }, ROOT)).toBe(

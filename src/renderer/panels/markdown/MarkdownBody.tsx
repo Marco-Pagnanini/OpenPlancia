@@ -1,8 +1,17 @@
-import { CornersInIcon, EyeIcon, PencilSimpleIcon, WarningIcon } from '@phosphor-icons/react';
+import {
+  ArrowCounterClockwiseIcon,
+  CornersInIcon,
+  EyeIcon,
+  PencilSimpleIcon,
+  RobotIcon,
+  WarningIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import type { MarkdownPanel } from '@shared/types';
 import { useMarkdownStore, type SaveState } from '../../stores/markdownStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { MarkdownPreview } from './MarkdownPreview';
 
 const MarkdownEditor = lazy(() => import('./MarkdownEditor'));
@@ -75,7 +84,12 @@ export function MarkdownBody({
   const saveState = useMarkdownStore((s) => s.saveState[id] ?? 'saved');
   const error = useMarkdownStore((s) => s.errors[id]);
   const conflict = useMarkdownStore((s) => s.conflicts[id] === true);
-  const { load, edit, flush, discardDraft, keepDraft } = useMarkdownStore.getState();
+  const claudeEdit = useMarkdownStore((s) => s.claudeEdits[id]);
+  const authorTitle = useWorkspaceStore(
+    (s) => s.snapshot?.board.panels.find((p) => p.id === claudeEdit?.author)?.title,
+  );
+  const { load, edit, flush, discardDraft, keepDraft, undo, dismissClaudeEdit } =
+    useMarkdownStore.getState();
   const inFocusMode = useUiStore((s) => s.focusId === id);
   const setFocus = useUiStore((s) => s.setFocus);
   const [view, setView] = useState<'preview' | 'edit'>('preview');
@@ -99,7 +113,11 @@ export function MarkdownBody({
   const content = draft ?? doc?.content ?? '';
 
   return (
-    <div className="flex h-full flex-col">
+    // Re-keyed on every Claude write so the flash plays again.
+    <div
+      key={claudeEdit?.at ?? 'idle'}
+      className={`flex h-full flex-col ${claudeEdit ? 'claude-flash' : ''}`}
+    >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line-soft px-2.5">
         <ViewToggle view={view} onChange={setView} />
         <span
@@ -123,6 +141,28 @@ export function MarkdownBody({
         )}
       </div>
 
+      {claudeEdit && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent-soft">
+          <RobotIcon size={14} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            Modificato da <span className="font-mono">{authorTitle ?? 'Claude'}</span>
+          </span>
+          {doc?.canUndo && (
+            <button type="button" className={BAR_BUTTON} onClick={() => void undo(id)}>
+              <ArrowCounterClockwiseIcon size={13} />
+              Annulla
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Chiudi avviso"
+            onClick={() => dismissClaudeEdit(id)}
+            className="grid size-6 place-items-center rounded-md text-accent-soft/70 hover:bg-accent/15 hover:text-accent-soft"
+          >
+            <XIcon size={12} />
+          </button>
+        </div>
+      )}
       {conflict && (
         <Notice tone="warning">
           <span className="min-w-0 basis-[calc(100%-24px)]">

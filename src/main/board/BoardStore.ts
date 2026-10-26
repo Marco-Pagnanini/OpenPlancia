@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { basename } from 'node:path';
+import { checkConnection } from '@shared/access';
 import { BOARD_SCHEMA_VERSION } from '@shared/schemas';
 import { DEFAULT_PANEL_SIZES, MIN_PANEL_SIZE, defaultPanelTitle } from '@shared/panels';
 import type {
@@ -200,13 +201,54 @@ export class BoardStore {
       }
       case 'setViewport':
         return { ...board, viewport: intent.viewport };
+      case 'connect': {
+        const source = board.panels.find((p) => p.id === intent.source);
+        const target = board.panels.find((p) => p.id === intent.target);
+        const check = checkConnection(source, target, board.connections);
+        if (!check.ok) throw new BoardError(check.message);
+        const taken = new Set(board.connections.map((c) => c.id));
+        let id = '';
+        for (let attempt = 0; attempt < 100 && (id === '' || taken.has(id)); attempt++) {
+          id = `conn-${this.randomHex()}`;
+        }
+        if (taken.has(id)) throw new BoardError('Impossibile generare un id per il collegamento');
+        return {
+          ...board,
+          connections: [
+            ...board.connections,
+            {
+              id,
+              source: intent.source,
+              target: intent.target,
+              createdAt: this.now().toISOString(),
+            },
+          ],
+        };
+      }
+      case 'disconnect': {
+        const ids = new Set(intent.ids);
+        return { ...board, connections: board.connections.filter((c) => !ids.has(c.id)) };
+      }
       case 'setTerminalMode': {
         const terminal = this.requireTerminal(board, intent.id);
         if (terminal.mode === intent.mode) return board;
         // A different program starts from scratch: no session to resume.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { claudeSessionId, ...rest } = terminal;
-        return this.replacePanel(board, { ...rest, mode: intent.mode, status: 'not-started' });
+        const next = this.replacePanel(board, {
+          ...rest,
+          mode: intent.mode,
+          status: 'not-started',
+        });
+        // A shell cannot hold arrows.
+        return intent.mode === 'shell'
+          ? {
+              ...next,
+              connections: next.connections.filter(
+                (c) => c.source !== intent.id && c.target !== intent.id,
+              ),
+            }
+          : next;
       }
     }
   }

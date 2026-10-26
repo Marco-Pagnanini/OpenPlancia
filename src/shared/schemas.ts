@@ -122,6 +122,9 @@ export const boardIntentSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deletePanels'), ids: z.array(z.string()).min(1) }),
   z.object({ type: z.literal('setViewport'), viewport: viewportSchema }),
   z.object({ type: z.literal('setTerminalMode'), id: z.string(), mode: terminalModeSchema }),
+  /** Arrow from `source` to `target` (spec §6). */
+  z.object({ type: z.literal('connect'), source: z.string().min(1), target: z.string().min(1) }),
+  z.object({ type: z.literal('disconnect'), ids: z.array(z.string()).min(1) }),
 ]);
 
 // Terminal IPC payloads (renderer → main).
@@ -154,6 +157,11 @@ export const markdownCreateSchema = z.object({
   mode: z.enum(['new', 'open']),
   position: positionSchema,
 });
+export const connectionHistorySchema = z.object({
+  terminalId: terminalIdSchema,
+  panelId: terminalIdSchema,
+});
+
 export const markdownWriteSchema = z.object({
   id: terminalIdSchema,
   content: z.string().max(MARKDOWN_MAX_CHARS),

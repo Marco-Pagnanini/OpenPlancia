@@ -1,25 +1,46 @@
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
   MiniMap,
   ReactFlow,
+  type Connection,
+  type EdgeTypes,
   type NodeTypes,
+  type OnConnectEnd,
   type OnNodeDrag,
 } from '@xyflow/react';
 import { useCallback, useState } from 'react';
+import { checkConnection } from '@shared/access';
+import { InfoToast } from '../components/InfoToast';
 import { ActivityPanel } from '../inspectors/ActivityPanel';
+import { ManifestModal } from '../inspectors/ManifestModal';
+import { WireInspector } from '../inspectors/WireInspector';
 import { PanelNodeComponent } from '../panels/PanelNode';
 import { confirmDelete } from '../panels/panelMeta';
 import { useUiStore } from '../stores/uiStore';
-import { useWorkspaceStore, type PanelNode } from '../stores/workspaceStore';
+import { useWorkspaceStore, type PanelNode, type WireEdge } from '../stores/workspaceStore';
 import { FocusOverlay } from './FocusOverlay';
 import { TOOL_HINTS } from './tools';
 import { ToolRail } from './ToolRail';
 import { TopBar } from './TopBar';
 import { useShortcuts } from './useShortcuts';
+import { WireEdgeComponent } from './WireEdge';
 import { ZoomControls } from './ZoomControls';
 
 const nodeTypes: NodeTypes = { panel: PanelNodeComponent };
+const edgeTypes: EdgeTypes = { wire: WireEdgeComponent };
+
+/** Arrow rules checked against the main-process board (the main checks them again). */
+function check(source: string | null, target: string | null) {
+  const board = useWorkspaceStore.getState().snapshot?.board;
+  const panels = board?.panels ?? [];
+  return checkConnection(
+    panels.find((p) => p.id === source),
+    panels.find((p) => p.id === target),
+    board?.connections ?? [],
+  );
+}
 const DELETE_KEYS = ['Backspace', 'Delete'];
 
 function Hint() {
@@ -60,12 +81,53 @@ export function Canvas() {
     [dispatch],
   );
 
+  const edges = useWorkspaceStore((s) => s.edges);
+  const applyEdgeChanges = useWorkspaceStore((s) => s.applyEdgeChanges);
+  const showToast = useUiStore((s) => s.showToast);
+  const setWire = useUiStore((s) => s.setWire);
+
+  const onConnect = useCallback(
+    async ({ source, target }: Connection) => {
+      if (await dispatch({ type: 'connect', source, target })) {
+        showToast('Claude vedrà questo collegamento al prossimo messaggio');
+      }
+    },
+    [dispatch, showToast],
+  );
+
+  // Dropped on a panel that refuses the arrow: say why (e.g. "Multi-agente: in arrivo").
+  const onConnectEnd: OnConnectEnd = useCallback(
+    (_event, state) => {
+      if (!state.fromNode || !state.toNode || state.fromNode.id === state.toNode.id) return;
+      const result = check(state.fromNode.id, state.toNode.id);
+      if (!result.ok) showToast(result.message);
+    },
+    [showToast],
+  );
+
+  const onEdgesDelete = useCallback(
+    (deleted: WireEdge[]) => {
+      const ids = deleted.flatMap((e) => e.data?.pair.connectionIds ?? []);
+      if (ids.length > 0) void dispatch({ type: 'disconnect', ids });
+    },
+    [dispatch],
+  );
+
   return (
     <div className={`relative h-full w-full ${hand ? '[&_.react-flow__pane]:cursor-grab' : ''}`}>
-      <ReactFlow<PanelNode>
+      <ReactFlow<PanelNode, WireEdge>
         nodes={nodes}
-        edges={[]}
+        edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onEdgesChange={applyEdgeChanges}
+        onEdgesDelete={onEdgesDelete}
+        onEdgeClick={(_event, edge) => setWire(edge.id)}
+        onConnect={(connection) => void onConnect(connection)}
+        onConnectEnd={onConnectEnd}
+        isValidConnection={(c) => check(c.source, c.target).ok}
+        connectionMode={ConnectionMode.Loose}
+        connectionRadius={36}
         onNodesChange={applyChanges}
         onNodeDragStop={onNodeDragStop}
         onNodesDelete={onNodesDelete}
@@ -83,7 +145,7 @@ export function Canvas() {
         nodesDraggable={!hand}
         elementsSelectable={!hand}
         deleteKeyCode={DELETE_KEYS}
-        nodesConnectable={false}
+        nodesConnectable={!hand}
         colorMode="dark"
         attributionPosition="bottom-left"
       >
@@ -107,7 +169,10 @@ export function Canvas() {
       <ZoomControls />
       <Hint />
       <ActivityPanel />
+      <WireInspector />
+      <InfoToast />
       <FocusOverlay />
+      <ManifestModal />
     </div>
   );
 }
