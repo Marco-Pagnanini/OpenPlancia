@@ -91,6 +91,7 @@ function SyncButton() {
         agents > 0
           ? `Lavagna risincronizzata · ${agents === 1 ? "l'agente riceve" : `${agents} agenti ricevono`} il contesto completo al prossimo messaggio o tool`
           : 'Lavagna risincronizzata',
+        'success',
       );
     } catch (err) {
       useWorkspaceStore.setState({ error: err instanceof Error ? err.message : String(err) });

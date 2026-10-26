@@ -2,9 +2,13 @@ import { create } from 'zustand';
 
 export type Tool = 'select' | 'hand';
 
+/** success = something worked; warning = something was refused; info = neutral. */
+export type ToastTone = 'success' | 'info' | 'warning';
+
 export interface Toast {
   id: number;
   message: string;
+  tone: ToastTone;
 }
 
 interface UiState {
@@ -30,7 +34,7 @@ interface UiState {
   setWire(key: string | null): void;
   setManifestFor(id: string | null): void;
   setArchJsonFor(id: string | null): void;
-  showToast(message: string): void;
+  showToast(message: string, tone?: ToastTone): void;
   hideToast(id: number): void;
 }
 
@@ -54,9 +58,9 @@ export const useUiStore = create<UiState>()((set) => ({
   setWire: (wireKey) => set(wireKey ? { wireKey, activityId: null } : { wireKey }),
   setManifestFor: (manifestFor) => set({ manifestFor }),
   setArchJsonFor: (archJsonFor) => set({ archJsonFor }),
-  showToast: (message) => {
+  showToast: (message, tone = 'info') => {
     const id = ++toastSeq;
-    set({ toast: { id, message } });
+    set({ toast: { id, message, tone } });
     setTimeout(() => set((s) => (s.toast?.id === id ? { toast: null } : s)), TOAST_MS);
   },
   hideToast: (id) => set((s) => (s.toast?.id === id ? { toast: null } : s)),
