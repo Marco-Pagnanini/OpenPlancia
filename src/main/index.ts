@@ -30,7 +30,7 @@ import {
   terminalWriteSchema,
   workspacePathPayloadSchema,
 } from '@shared/schemas';
-import type { WorkspaceSnapshot } from '@shared/types';
+import type { Panel, WorkspaceSnapshot } from '@shared/types';
 import { AccessService } from './access/AccessService';
 import { ConnectionLog } from './access/ConnectionLog';
 import { PanelTools } from './access/panelTools';
@@ -177,6 +177,15 @@ const panelTools = new PanelTools({
 });
 const manifests = new ManifestTracker();
 
+/** Version of each file of a folder panel, for the manifest's "what changed". */
+function folderVersions(panel: Panel): Record<string, number> | undefined {
+  try {
+    return folders.fileVersions(panel.id);
+  } catch {
+    return undefined;
+  }
+}
+
 function manifestEntries(terminalId: string) {
   const inlined = new Set<string>();
   return collectManifestEntries(
@@ -191,13 +200,7 @@ function manifestEntries(terminalId: string) {
       if (panel.type === 'folder') return folders.manifestContent(panel, inlined);
       return undefined;
     },
-    (panel) => {
-      try {
-        return folders.fileVersions(panel.id);
-      } catch {
-        return undefined;
-      }
-    },
+    folderVersions,
   );
 }
 
@@ -215,13 +218,27 @@ function agentNames(terminalId: string) {
   return { to: to.map(agentName), from: from.map(agentName) };
 }
 
-async function manifestFor(terminalId: string, moment: 'start' | 'prompt'): Promise<string | null> {
-  const entries = await manifestEntries(terminalId);
+async function manifestFor(
+  terminalId: string,
+  moment: 'start' | 'prompt' | 'tool',
+): Promise<string | null> {
   const names = agentNames(terminalId);
+  // After every tool call: first a cheap look (versions and arrows, no file reads).
+  if (moment === 'tool') {
+    const light = await collectManifestEntries(
+      terminalId,
+      workspace.panels(),
+      workspace.connections(),
+      async () => undefined,
+      folderVersions,
+    );
+    if (!manifests.pending(terminalId, light, names)) return null;
+  }
+  const entries = await manifestEntries(terminalId);
   const text =
     moment === 'start'
       ? manifests.sessionStart(terminalId, entries, names)
-      : manifests.prompt(terminalId, entries, names);
+      : manifests.update(terminalId, entries, names);
   if (text) {
     for (const entry of entries) {
       if (entry.content === undefined) continue;
@@ -643,6 +660,24 @@ function registerIpc(): void {
   ipcMain.handle(IpcChannels.workspaceOpenDialog, () => openWorkspaceDialog());
   ipcMain.handle(IpcChannels.workspaceClose, () => workspace.goHome());
   ipcMain.handle(IpcChannels.workspaceRecent, () => workspace.recent());
+  ipcMain.handle(IpcChannels.workspaceSync, async () => {
+    // Every agent gets its whole manifest again at the next prompt or tool call.
+    manifests.resyncAll();
+    git.forget();
+    await folders.rescanAll();
+    await markdown.sync();
+    send(IpcChannels.workspaceState, workspace.snapshot());
+    const agents = workspace
+      .panels()
+      .filter(
+        (p) =>
+          p.type === 'terminal' &&
+          p.mode === 'claude' &&
+          p.status !== 'not-started' &&
+          p.status !== 'exited',
+      ).length;
+    return { agents };
+  });
   ipcMain.handle(
     IpcChannels.workspaceOpenRecent,
     async (_event, payload: unknown): Promise<OpenWorkspaceResult> => {

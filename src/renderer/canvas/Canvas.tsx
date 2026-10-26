@@ -91,7 +91,7 @@ export function Canvas() {
   const onConnect = useCallback(
     async ({ source, target }: Connection) => {
       if (await dispatch({ type: 'connect', source, target })) {
-        showToast('Claude vedrà questo collegamento al prossimo messaggio');
+        showToast('Claude vedrà questo collegamento al prossimo messaggio o tool');
       }
     },
     [dispatch, showToast],

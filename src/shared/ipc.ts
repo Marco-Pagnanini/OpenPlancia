@@ -13,6 +13,7 @@ export const IpcChannels = {
   workspaceClose: 'plancia:workspace:close',
   workspaceRecent: 'plancia:workspace:recent',
   workspaceOpenRecent: 'plancia:workspace:open-recent',
+  workspaceSync: 'plancia:workspace:sync',
   /** main → renderer: the whole workspace snapshot after any change (or null when closed). */
   workspaceState: 'plancia:workspace:state',
   boardDispatch: 'plancia:board:dispatch',
@@ -275,6 +276,11 @@ export interface PlanciaApi {
     close(): Promise<void>;
     recent(): Promise<RecentWorkspace[]>;
     openRecent(path: string): Promise<OpenWorkspaceResult>;
+    /**
+     * "Sync": reloads folders and files from disk, sends the board again and makes every agent
+     * get its whole context at the next prompt or tool call. Returns the running agents.
+     */
+    sync(): Promise<{ agents: number }>;
   };
   board: {
     dispatch(intent: BoardIntent): Promise<DispatchResult>;

@@ -361,16 +361,22 @@ sequenceDiagram
   H->>CL: lettura "nel contesto" per ogni contenuto incluso
   H-->>CC: additionalContext
 
-  CC->>H: UserPromptSubmit
-  H->>MT: prompt → cambiato? (frecce, accesso, versione dei panel leggibili)
+  CC->>H: UserPromptSubmit (anche messaggi di altri agenti)
+  H->>MT: update → cambiato? (frecce, accesso, versione dei panel leggibili, agenti)
   alt nulla è cambiato
     H-->>CC: 200 vuoto
   else qualcosa è cambiato
     H-->>CC: "Modificato dall'ultimo messaggio: …" + manifesto
   end
+
+  CC->>H: PostToolUse (dopo ogni tool, a metà turno)
+  H->>MT: pending? (solo versioni e frecce, nessun file letto)
+  alt è cambiato qualcosa, o l'utente ha premuto Sync
+    H-->>CC: additionalContext con le novità, o il manifesto completo "risincronizzato"
+  end
 ```
 
-Regole del manifesto ([manifest.ts](src/main/claude/manifest.ts)): fatti, non ordini; contenuti inclusi in ordine di dimensione finché il testo resta sotto **9.000 caratteri** (limite di `additionalContext`: 10.000); gli altri indicati come "disponibili via read_panel"; se l'ultima freccia viene tolta, Claude riceve "nessun panel è collegato a questa sessione".
+Regole del manifesto ([manifest.ts](src/main/claude/manifest.ts)): fatti, non ordini; contenuti inclusi in ordine di dimensione finché il testo resta sotto **9.000 caratteri** (limite di `additionalContext`: 10.000); gli altri indicati come "disponibili via read_panel"; se l'ultima freccia viene tolta, Claude riceve "nessun panel è collegato a questa sessione". Le frecce cambiate a metà turno arrivano al tool successivo (`PostToolUse`), non solo al messaggio dopo. **Sync** (barra in alto) fa ricevere a ogni agente il manifesto completo, con l'intestazione "contesto risincronizzato", al prossimo messaggio o tool (`ManifestTracker.resyncAll`).
 
 ### 7.3 Lettura e scrittura (MCP) e protezione dei file
 
@@ -721,7 +727,7 @@ flowchart TB
 | [main.tsx](src/renderer/main.tsx) · [App.tsx](src/renderer/App.tsx) | Avvio React, font (Geist), stili React Flow. `App` sceglie tra schermata iniziale e lavagna, avvia gli store. |
 | [index.css](src/renderer/index.css) | **Token del design** (colori caldi, accento `#D97757`, font) e override di React Flow e xterm. |
 | [canvas/Canvas.tsx](src/renderer/canvas/Canvas.tsx) | La lavagna React Flow: nodi, griglia, minimappa, pan/zoom (rotella = pan, pinch/Ctrl = zoom), conferma prima di eliminare, monta TopBar, ToolRail, zoom, ActivityPanel, FocusOverlay. |
-| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | "Riprendi tutti gli agenti (N)" quando ci sono terminali Claude non avviati (dopo la riapertura della lavagna). Logo + OpenPlancia (clic = torna alla schermata iniziale, con conferma se ci sono terminali aperti), nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
+| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | **Sync**: ricarica lavagna, cartelle, file e feed ([resync.ts](src/renderer/stores/resync.ts)) e rimanda a ogni agente il contesto completo. "Riprendi tutti gli agenti (N)" quando ci sono terminali Claude non avviati (dopo la riapertura della lavagna). Logo + OpenPlancia (clic = torna alla schermata iniziale, con conferma se ci sono terminali aperti), nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
 | [canvas/ToolRail.tsx](src/renderer/canvas/ToolRail.tsx) · [tools.ts](src/renderer/canvas/tools.ts) | Barra strumenti verticale: puntatore, sposta lavagna, creazione panel, menu Markdown (nuovo / apri file), tooltip con scorciatoie. |
 | [canvas/useShortcuts.ts](src/renderer/canvas/useShortcuts.ts) | Scorciatoie a un tasto (V, H, T, L, M, A, K, Esc, 0). `isTyping` le disattiva in campi di testo, Monaco (`EditContext`), xterm e `.nokey`, e in modalità focus. |
 | [canvas/useCreatePanel.ts](src/renderer/canvas/useCreatePanel.ts) | Crea un panel al centro della vista, a cascata. `useCreateMarkdownPanel` chiede al main il dialog del file. |
@@ -808,6 +814,7 @@ L'MVP della spec è completo e M8 aggiunge gli agenti che si scrivono. Idee aper
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
 | — | "Riprendi tutti gli agenti" nella barra in alto; ripresa di una sessione senza conversazione salvata = sessione nuova con lo stesso id |
+| — | Contesto aggiornato anche dopo ogni tool (`PostToolUse`); pulsante **Sync** per risincronizzare lavagna e agenti |
 | M8 | Agenti che si scrivono: nuova sezione 11 (messaggi nativi governati dalle frecce, subagent, risposte al socket), AgentService nella visione d'insieme, tabella delle connessioni aggiornata, file nuovi in mappa |
 | M7 | Panel Codice: nuova sezione 10 (feed dal PostToolUse, git in sola lettura, regole), CodeService e GitService nella visione d'insieme, file nuovi in mappa, `PanelPlaceholder` rimosso; roadmap chiusa (MVP completo) |
 | M6.5 | Panel Cartella: nuova sezione 9 (albero, file condivisi con MarkdownService, contesto a indice, permessi sommati), FolderService nella visione d'insieme, file nuovi in mappa; sezioni successive rinumerate |

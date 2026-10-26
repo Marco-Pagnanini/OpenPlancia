@@ -193,33 +193,71 @@ export function describeAgentChanges(before: AgentLinkNames, after: AgentLinkNam
  * Decides when to inject (spec §7.4): always at SessionStart when something is linked; at
  * UserPromptSubmit only if the arrows or a readable panel's version changed since last time.
  */
+const RESYNC_HEAD =
+  "OpenPlancia — contesto risincronizzato dall'utente: vale quanto segue, non le informazioni ricevute prima.";
+
 export class ManifestTracker {
-  private readonly last = new Map<string, { state: ManifestState; agents: AgentLinkNames }>();
+  private readonly last = new Map<
+    string,
+    { state: ManifestState; agents: AgentLinkNames; epoch: number }
+  >();
+  /** Bumped by "Sync": every session gets the whole manifest at its next prompt or tool. */
+  private epoch = 0;
 
   sessionStart(
     terminalId: string,
     entries: ManifestEntry[],
     agents: AgentLinkNames = NO_AGENTS,
   ): string | null {
-    this.last.set(terminalId, { state: manifestState(entries), agents });
+    this.last.set(terminalId, { state: manifestState(entries), agents, epoch: this.epoch });
     const text = renderManifest(entries, [], agents);
     return text === '' ? null : text;
   }
 
-  prompt(
+  /** Whether `update` would inject something (cheap: versions and arrows only, no contents). */
+  pending(
+    terminalId: string,
+    entries: ManifestEntry[],
+    agents: AgentLinkNames = NO_AGENTS,
+  ): boolean {
+    const previous = this.last.get(terminalId);
+    if (previous && previous.epoch !== this.epoch) return true;
+    const before = previous ?? { state: {}, agents: NO_AGENTS };
+    return (
+      describeChanges(before.state, manifestState(entries)).length > 0 ||
+      describeAgentChanges(before.agents, agents).length > 0
+    );
+  }
+
+  /**
+   * At a prompt or after a tool: what changed since the last injection (arrows, versions of
+   * readable panels, agents), or the whole manifest after a "Sync"; null when nothing did.
+   */
+  update(
     terminalId: string,
     entries: ManifestEntry[],
     agents: AgentLinkNames = NO_AGENTS,
   ): string | null {
     const next = manifestState(entries);
-    const previous = this.last.get(terminalId) ?? { state: {}, agents: NO_AGENTS };
+    const previous = this.last.get(terminalId);
+    if (previous && previous.epoch !== this.epoch) {
+      this.last.set(terminalId, { state: next, agents, epoch: this.epoch });
+      const text = renderManifest(entries, [], agents);
+      return `${RESYNC_HEAD}\n\n${text === '' ? 'Nessun panel e nessun agente è collegato a questa sessione.' : text}`;
+    }
+    const before = previous ?? { state: {}, agents: NO_AGENTS };
     const changes = [
-      ...describeChanges(previous.state, next),
-      ...describeAgentChanges(previous.agents, agents),
+      ...describeChanges(before.state, next),
+      ...describeAgentChanges(before.agents, agents),
     ];
     if (changes.length === 0) return null;
-    this.last.set(terminalId, { state: next, agents });
+    this.last.set(terminalId, { state: next, agents, epoch: this.epoch });
     return renderManifest(entries, changes, agents);
+  }
+
+  /** "Sync": every session gets the whole manifest again at its next prompt or tool call. */
+  resyncAll(): void {
+    this.epoch++;
   }
 
   forget(terminalId: string): void {

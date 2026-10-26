@@ -226,6 +226,12 @@ export class FolderService {
     }, RESCAN_MS);
   }
 
+  /** "Sync": lists every folder again from disk. */
+  async rescanAll(): Promise<void> {
+    await this.sync();
+    for (const id of [...this.folders.keys()]) await this.rescan(id);
+  }
+
   async rescan(id: string): Promise<void> {
     const folder = this.folders.get(id);
     if (!folder) return;

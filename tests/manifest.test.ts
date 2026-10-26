@@ -116,32 +116,63 @@ describe('describeChanges', () => {
   });
 });
 
+describe('ManifestTracker: changes during a turn and "Sync"', () => {
+  it('sees cheaply whether something changed, and sends the whole context after a Sync', () => {
+    const tracker = new ManifestTracker();
+    const agents = { to: ['Claude 2'], from: [] };
+    tracker.sessionStart('t1', [manifestEntryAt()], agents);
+    expect(tracker.pending('t1', [manifestEntryAt()], agents)).toBe(false);
+    expect(tracker.update('t1', [manifestEntryAt()], agents)).toBeNull();
+    expect(tracker.pending('t1', [manifestEntryAt(8)], agents)).toBe(true);
+
+    tracker.resyncAll();
+    expect(tracker.pending('t1', [manifestEntryAt()], agents)).toBe(true);
+    const text = tracker.update('t1', [manifestEntryAt()], agents);
+    expect(text).toMatch(/^OpenPlancia — contesto risincronizzato dall'utente/);
+    expect(text).toContain('=== AGENTS.md (versione 7) ===');
+    expect(text).toContain('puoi scrivere con SendMessage a: "Claude 2"');
+    // Once is enough.
+    expect(tracker.update('t1', [manifestEntryAt()], agents)).toBeNull();
+  });
+
+  it('says plainly that nothing is linked when a Sync finds nothing', () => {
+    const tracker = new ManifestTracker();
+    tracker.sessionStart('t1', []);
+    tracker.resyncAll();
+    expect(tracker.update('t1', [])).toContain('Nessun panel e nessun agente è collegato');
+  });
+});
+
+function manifestEntryAt(version = 7): ManifestEntry {
+  return { ...agents, version };
+}
+
 describe('ManifestTracker (injection only on change)', () => {
   it('injects at session start, then only when something changed', () => {
     const tracker = new ManifestTracker();
     expect(tracker.sessionStart('t1', [agents])).toContain('=== AGENTS.md (versione 7) ===');
-    expect(tracker.prompt('t1', [agents])).toBeNull();
-    const next = tracker.prompt('t1', [{ ...agents, version: 8 }]);
+    expect(tracker.update('t1', [agents])).toBeNull();
+    const next = tracker.update('t1', [{ ...agents, version: 8 }]);
     expect(next).toMatch(/^Modificato dall'ultimo messaggio: AGENTS\.md \(v7 → v8\)/);
-    expect(tracker.prompt('t1', [{ ...agents, version: 8 }])).toBeNull();
+    expect(tracker.update('t1', [{ ...agents, version: 8 }])).toBeNull();
   });
 
   it('injects nothing at start when no panel is linked', () => {
     const tracker = new ManifestTracker();
     expect(tracker.sessionStart('t1', [])).toBeNull();
-    expect(tracker.prompt('t1', [])).toBeNull();
+    expect(tracker.update('t1', [])).toBeNull();
   });
 
   it('tells Claude when the last arrow is removed', () => {
     const tracker = new ManifestTracker();
     tracker.sessionStart('t1', [agents]);
-    expect(tracker.prompt('t1', [])).toContain('connessione rimossa: AGENTS.md');
-    expect(tracker.prompt('t1', [])).toBeNull();
+    expect(tracker.update('t1', [])).toContain('connessione rimossa: AGENTS.md');
+    expect(tracker.update('t1', [])).toBeNull();
   });
 
   it('treats a terminal it never saw start (OpenPlancia restarted) as starting from nothing', () => {
     const tracker = new ManifestTracker();
-    expect(tracker.prompt('t1', [agents])).toContain('nuova connessione: AGENTS.md (lettura)');
+    expect(tracker.update('t1', [agents])).toContain('nuova connessione: AGENTS.md (lettura)');
   });
 });
 

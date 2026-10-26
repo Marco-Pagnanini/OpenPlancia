@@ -1,8 +1,15 @@
-import { ArrowCounterClockwiseIcon, TerminalWindowIcon } from '@phosphor-icons/react';
+import {
+  ArrowCounterClockwiseIcon,
+  ArrowsClockwiseIcon,
+  TerminalWindowIcon,
+} from '@phosphor-icons/react';
+import { useState } from 'react';
 import type { TerminalPanel } from '@shared/types';
 import { Logo } from '../components/Logo';
 import { terminalRegistry } from '../panels/terminal/terminalRegistry';
+import { resyncBoard } from '../stores/resync';
 import { useTerminalStore } from '../stores/terminalStore';
+import { useUiStore } from '../stores/uiStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 
 function AgentsPill() {
@@ -69,6 +76,42 @@ function ResumeAll() {
   );
 }
 
+/**
+ * "Sync": reloads the board, folders and files, and has every agent receive its whole context
+ * (panels and arrows) again at its next message or tool call, in case one missed a change.
+ */
+function SyncButton() {
+  const [busy, setBusy] = useState(false);
+  const showToast = useUiStore((s) => s.showToast);
+  const sync = async () => {
+    setBusy(true);
+    try {
+      const agents = await resyncBoard();
+      showToast(
+        agents > 0
+          ? `Lavagna risincronizzata · ${agents === 1 ? "l'agente riceve" : `${agents} agenti ricevono`} il contesto completo al prossimo messaggio o tool`
+          : 'Lavagna risincronizzata',
+      );
+    } catch (err) {
+      useWorkspaceStore.setState({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void sync()}
+      disabled={busy}
+      title="Risincronizza la lavagna: ricarica panel e file, e manda di nuovo a ogni agente il contesto completo (panel e frecce)"
+      className="flex items-center gap-2 rounded-[10px] border border-line bg-chrome px-3 py-[7px] text-[12.5px] text-ink-2 hover:bg-raised hover:text-ink disabled:opacity-60"
+    >
+      <ArrowsClockwiseIcon size={14} className={busy ? 'animate-spin' : ''} />
+      Sync
+    </button>
+  );
+}
+
 export function TopBar() {
   const name = useWorkspaceStore((s) => s.snapshot?.name);
   const openFolder = useWorkspaceStore((s) => s.openFolder);
@@ -98,6 +141,7 @@ export function TopBar() {
       </div>
       <div className="pointer-events-auto flex items-center gap-2">
         <ResumeAll />
+        <SyncButton />
         <AgentsPill />
       </div>
     </div>
