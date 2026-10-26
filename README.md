@@ -12,7 +12,7 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-180%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/test-199%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
 [![Stato](https://img.shields.io/badge/stato-MVP%20in%20sviluppo-F2994A?style=flat-square)](#%EF%B8%8F-roadmap)
 
 [Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
@@ -93,6 +93,15 @@ Senza freccia di scrittura, `Write` ed `Edit` sui file dei panel vengono **blocc
 ### 🔍 Tutto trasparente
 
 La freccia si anima quando Claude la usa. L'inspector mostra letture e scritture con versione e token stimati, e **"Cosa vede Claude"** mostra il testo esatto passato alla sessione.
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+
+### 📁 Cartelle intere in un solo panel
+
+Scegli una cartella (es. `docs/`): il panel mostra l'albero dei suoi file `.md`, con l'anteprima del file selezionato. Una freccia sola dà a Claude il contesto di tutta la cartella, e con la freccia di scrittura può anche **creare** file nuovi (un nuovo ADR, un piano). Nessuna lavagna piena di panel Markdown.
 
 </td>
 </tr>
@@ -182,6 +191,7 @@ Quindi sì, rispetto a uno screenshot si risparmia circa **8 volte** e rispetto 
 Il risparmio più grande però non dipende dal formato, ma da **quando** e **cosa** si manda:
 
 - **Solo i panel collegati** entrano nel contesto, non l'intero progetto.
+- Per una **cartella** entra l'indice dei file (percorso, titolo, versione: ~50 caratteri a file) più i file piccoli; gli altri Claude li legge solo se gli servono. Un file presente in due cartelle collegate entra una volta sola.
 - Il contenuto viene mandato **all'avvio della sessione e poi solo se cambia** (la versione del panel è aumentata o le frecce sono cambiate). Se scrivi dieci messaggi senza toccare il diagramma, Claude lo riceve una volta sola.
 - Oltre i 9.000 caratteri di contesto, i panel più grandi restano fuori e Claude li legge con `read_panel` solo se gli servono.
 
@@ -219,6 +229,7 @@ Poi **Apri cartella progetto**, premi <kbd>L</kbd> per una sessione Claude, <kbd
 | <kbd>T</kbd>                           | nuovo terminale                         |
 | <kbd>L</kbd>                           | nuova sessione Claude                   |
 | <kbd>M</kbd>                           | nuovo file Markdown o apri un esistente |
+| <kbd>F</kbd>                           | nuova cartella (albero dei file .md)    |
 | <kbd>A</kbd>                           | nuovo schema di architettura            |
 | <kbd>0</kbd>                           | inquadra tutti i panel                  |
 | <kbd>Backspace</kbd> / <kbd>Canc</kbd> | elimina i panel o le frecce selezionati |
@@ -272,6 +283,7 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 - [x] **M5** · Frecce come contesto: lettura, scrittura, blocco, Annulla, inspector
 - [x] Schermata iniziale con cartelle recenti
 - [x] **M6** · Panel Architettura: schemi in JSON validato che Claude legge e modifica, layout automatico, "Vedi JSON"
+- [x] **M6.5** · Panel Cartella: albero dei `.md` di una cartella, una freccia per tutta la cartella, Claude crea e modifica file
 - [ ] **M7** · Panel Codice: file e diff in sola lettura, aggiornati da quello che Claude modifica
 
 ## 🔒 Sicurezza

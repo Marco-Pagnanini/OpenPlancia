@@ -9,6 +9,8 @@ export interface AccessDeps {
   root(): string | null;
   /** Absolute real path of a markdown panel's file. */
   pathOf(panel: MarkdownPanel): Promise<string>;
+  /** Folder panels whose files include `path` (absolute, real). */
+  foldersAt?(path: string): string[];
 }
 
 /** Claude's own file tools that the arrows also govern (spec §7.5). */
@@ -44,8 +46,9 @@ export class AccessService {
   }
 
   /**
-   * PreToolUse guard for Write/Edit/MultiEdit/NotebookEdit: a file shown in a markdown panel can
-   * be changed only with a write arrow; nothing inside .plancia/ can be changed this way.
+   * PreToolUse guard for Write/Edit/MultiEdit/NotebookEdit: a file shown in a markdown panel or
+   * in a folder panel (also a new .md file there) can be changed only with a write arrow to one
+   * of those panels; nothing inside .plancia/ can be changed this way.
    */
   async checkFileWrite(
     terminalId: string,
@@ -65,8 +68,10 @@ export class AccessService {
       return { decision: 'deny', reason: PLANCIA_DIR_DENIED };
     }
 
-    const matches: MarkdownPanel[] = [];
+    const matches: Panel[] = [];
+    const folders = new Set(this.deps.foldersAt?.(path) ?? []);
     for (const panel of this.deps.panels()) {
+      if (folders.has(panel.id)) matches.push(panel);
       if (panel.type !== 'markdown') continue;
       try {
         if ((await this.deps.pathOf(panel)) === path) matches.push(panel);
@@ -75,11 +80,12 @@ export class AccessService {
       }
     }
     if (matches.length === 0) return { decision: 'none' };
-    const blocked = matches.find((p) => !this.access(terminalId, p.id).write);
-    if (blocked) {
+    // The arrows add up: a write arrow to any panel showing the file is enough.
+    if (!matches.some((p) => this.access(terminalId, p.id).write)) {
+      const first = matches[0] as Panel;
       return {
         decision: 'deny',
-        reason: deniedMessage(blocked.title, this.access(terminalId, blocked.id), 'write'),
+        reason: deniedMessage(first.title, this.access(terminalId, first.id), 'write'),
       };
     }
     return { decision: 'allow', path, panelIds: matches.map((p) => p.id) };

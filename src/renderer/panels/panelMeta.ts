@@ -12,6 +12,8 @@ export function panelKindLabel(panel: Panel): string {
       return 'architettura';
     case 'code':
       return 'codice';
+    case 'folder':
+      return 'cartella';
   }
 }
 

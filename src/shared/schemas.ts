@@ -18,7 +18,7 @@ export const sizeSchema = z.object({
 });
 export const viewportSchema = z.object({ x: finite, y: finite, zoom: finite });
 
-export const panelTypeSchema = z.enum(['terminal', 'markdown', 'architecture', 'code']);
+export const panelTypeSchema = z.enum(['terminal', 'markdown', 'architecture', 'code', 'folder']);
 export const terminalModeSchema = z.enum(['shell', 'claude']);
 export const agentStatusSchema = z.enum([
   'not-started',
@@ -57,6 +57,14 @@ export const architecturePanelSchema = z.object({
   type: z.literal('architecture'),
 });
 
+/** A folder of the project shown as a tree of its markdown files (M6.5). */
+export const folderPanelSchema = z.object({
+  ...panelBaseShape,
+  type: z.literal('folder'),
+  /** Relative to the root, "." for the project folder itself. */
+  dirPath: z.string().min(1),
+});
+
 export const codeFollowSchema = z.union([
   z.literal('all-agents'),
   z.object({ terminalId: z.string().min(1) }),
@@ -74,6 +82,7 @@ export const persistedPanelSchema = z.discriminatedUnion('type', [
   markdownPanelSchema,
   architecturePanelSchema,
   codePanelSchema,
+  folderPanelSchema,
 ]);
 
 export const connectionSchema = z.object({
@@ -106,6 +115,8 @@ export const boardIntentSchema = z.discriminatedUnion('type', [
     mode: terminalModeSchema.optional(),
     /** Required for markdown panels. */
     filePath: workspacePathSchema.optional(),
+    /** Required for folder panels. */
+    dirPath: workspacePathSchema.optional(),
   }),
   z.object({
     type: z.literal('movePanels'),
@@ -156,6 +167,15 @@ export const MARKDOWN_MAX_CHARS = 2_000_000;
 export const markdownCreateSchema = z.object({
   mode: z.enum(['new', 'open']),
   position: positionSchema,
+});
+export const folderCreateSchema = z.object({ position: positionSchema });
+/** A file of a folder panel, relative to the folder; checked again by FolderService. */
+export const folderFileSchema = z.object({ id: terminalIdSchema, path: workspacePathSchema });
+export const folderWriteSchema = z.object({
+  id: terminalIdSchema,
+  path: workspacePathSchema,
+  content: z.string().max(MARKDOWN_MAX_CHARS),
+  baseVersion: z.number().int().nonnegative(),
 });
 export const connectionHistorySchema = z.object({
   terminalId: terminalIdSchema,

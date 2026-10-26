@@ -78,25 +78,8 @@ export function MarkdownBody({
   panel: MarkdownPanel;
   variant: 'panel' | 'focus';
 }) {
-  const { id } = panel;
-  const doc = useMarkdownStore((s) => s.docs[id]);
-  const draft = useMarkdownStore((s) => s.drafts[id]);
-  const saveState = useMarkdownStore((s) => s.saveState[id] ?? 'saved');
-  const error = useMarkdownStore((s) => s.errors[id]);
-  const conflict = useMarkdownStore((s) => s.conflicts[id] === true);
-  const claudeEdit = useMarkdownStore((s) => s.claudeEdits[id]);
-  const authorTitle = useWorkspaceStore(
-    (s) => s.snapshot?.board.panels.find((p) => p.id === claudeEdit?.author)?.title,
-  );
-  const { load, edit, flush, discardDraft, keepDraft, undo, dismissClaudeEdit } =
-    useMarkdownStore.getState();
-  const inFocusMode = useUiStore((s) => s.focusId === id);
+  const inFocusMode = useUiStore((s) => s.focusId === panel.id);
   const setFocus = useUiStore((s) => s.setFocus);
-  const [view, setView] = useState<'preview' | 'edit'>('preview');
-
-  useEffect(() => {
-    if (!useMarkdownStore.getState().docs[id]) void load(id);
-  }, [id, load]);
 
   if (variant === 'panel' && inFocusMode) {
     return (
@@ -109,6 +92,38 @@ export function MarkdownBody({
       </div>
     );
   }
+  return <MarkdownDocView docKey={panel.id} filePath={panel.filePath} title={panel.title} />;
+}
+
+/**
+ * One markdown document: preview / edit toggle, save state, Claude's last change with "Annulla",
+ * conflicts. Used by markdown panels and by the files of folder panels (`docKey` in the store).
+ */
+export function MarkdownDocView({
+  docKey: id,
+  filePath,
+  title,
+}: {
+  docKey: string;
+  filePath: string;
+  title: string;
+}) {
+  const doc = useMarkdownStore((s) => s.docs[id]);
+  const draft = useMarkdownStore((s) => s.drafts[id]);
+  const saveState = useMarkdownStore((s) => s.saveState[id] ?? 'saved');
+  const error = useMarkdownStore((s) => s.errors[id]);
+  const conflict = useMarkdownStore((s) => s.conflicts[id] === true);
+  const claudeEdit = useMarkdownStore((s) => s.claudeEdits[id]);
+  const authorTitle = useWorkspaceStore(
+    (s) => s.snapshot?.board.panels.find((p) => p.id === claudeEdit?.author)?.title,
+  );
+  const { load, edit, flush, discardDraft, keepDraft, undo, dismissClaudeEdit } =
+    useMarkdownStore.getState();
+  const [view, setView] = useState<'preview' | 'edit'>('preview');
+
+  useEffect(() => {
+    if (!useMarkdownStore.getState().docs[id]) void load(id);
+  }, [id, load]);
 
   const content = draft ?? doc?.content ?? '';
 
@@ -120,11 +135,8 @@ export function MarkdownBody({
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line-soft px-2.5">
         <ViewToggle view={view} onChange={setView} />
-        <span
-          className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-5"
-          title={panel.filePath}
-        >
-          {panel.filePath}
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-5" title={filePath}>
+          {filePath}
         </span>
         {doc && (
           <span
@@ -183,7 +195,7 @@ export function MarkdownBody({
           <button
             type="button"
             className={BAR_BUTTON}
-            onClick={() => edit(id, `# ${panel.title.replace(/\.(md|markdown|mdx)$/i, '')}\n`)}
+            onClick={() => edit(id, `# ${title.replace(/\.(md|markdown|mdx)$/i, '')}\n`)}
           >
             Crea il file
           </button>

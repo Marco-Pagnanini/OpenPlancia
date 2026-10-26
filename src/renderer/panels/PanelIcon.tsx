@@ -1,11 +1,6 @@
-import {
-  CodeIcon,
-  FileTextIcon,
-  RobotIcon,
-  TerminalWindowIcon,
-  TreeStructureIcon,
-} from '@phosphor-icons/react';
+import { createElement } from 'react';
 import type { PanelType, TerminalMode } from '@shared/types';
+import { panelIcon } from './panelIcons';
 
 export function PanelIcon({
   type,
@@ -18,15 +13,10 @@ export function PanelIcon({
   size?: number;
   className?: string;
 }) {
-  const props = { size, className: `shrink-0 ${className}`, 'aria-hidden': true } as const;
-  switch (type) {
-    case 'terminal':
-      return mode === 'claude' ? <RobotIcon {...props} /> : <TerminalWindowIcon {...props} />;
-    case 'markdown':
-      return <FileTextIcon {...props} />;
-    case 'architecture':
-      return <TreeStructureIcon {...props} />;
-    case 'code':
-      return <CodeIcon {...props} />;
-  }
+  // One mapping for every place that shows a panel's icon (panelIcons.ts).
+  return createElement(panelIcon(type, mode), {
+    size,
+    className: `shrink-0 ${className}`,
+    'aria-hidden': true,
+  });
 }

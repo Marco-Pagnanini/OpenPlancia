@@ -43,6 +43,7 @@ const ID_PREFIX: Record<PanelType, string> = {
   markdown: 'md',
   architecture: 'arch',
   code: 'code',
+  folder: 'dir',
 };
 
 const DUPLICATE_OFFSET = 40;
@@ -164,6 +165,7 @@ export class BoardStore {
           intent.position,
           intent.mode,
           intent.filePath,
+          intent.dirPath,
         );
         return { ...board, panels: [...board.panels, panel] };
       }
@@ -287,15 +289,24 @@ export class BoardStore {
     position: Position,
     mode: TerminalMode = 'shell',
     filePath?: string,
+    dirPath?: string,
   ): Panel {
     if (type === 'markdown' && !filePath) {
       throw new BoardError('Un panel markdown ha bisogno di un file');
     }
+    if (type === 'folder' && !dirPath) {
+      throw new BoardError('Un panel cartella ha bisogno di una cartella');
+    }
+    const folderTitle = dirPath && dirPath !== '.' ? `${basename(dirPath)}/` : 'Progetto/';
     const base = {
       id: this.newId(board, type),
       title: this.uniqueTitle(
         board,
-        type === 'markdown' && filePath ? basename(filePath) : defaultPanelTitle(type, mode),
+        type === 'markdown' && filePath
+          ? basename(filePath)
+          : type === 'folder'
+            ? folderTitle
+            : defaultPanelTitle(type, mode),
       ),
       position,
       size: DEFAULT_PANEL_SIZES[type],
@@ -311,6 +322,8 @@ export class BoardStore {
         return { ...base, type };
       case 'code':
         return { ...base, type, follow: 'all-agents' };
+      case 'folder':
+        return { ...base, type, dirPath: dirPath ?? '.' };
     }
   }
 

@@ -6,6 +6,7 @@ import { ErrorToast } from './components/ErrorToast';
 import { useActivityStore } from './stores/activityStore';
 import { useArchitectureStore } from './stores/architectureStore';
 import { useConnectionStore } from './stores/connectionStore';
+import { useFolderStore } from './stores/folderStore';
 import { useMarkdownStore } from './stores/markdownStore';
 import { useTerminalStore } from './stores/terminalStore';
 import { useWorkspaceStore } from './stores/workspaceStore';
@@ -20,6 +21,7 @@ export function App() {
   useEffect(() => useActivityStore.getState().init(), []);
   useEffect(() => useMarkdownStore.getState().init(), []);
   useEffect(() => useArchitectureStore.getState().init(), []);
+  useEffect(() => useFolderStore.getState().init(), []);
   useEffect(() => useConnectionStore.getState().init(), []);
 
   if (!loaded) return null;

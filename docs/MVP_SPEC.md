@@ -397,6 +397,12 @@ Comportamento comune: header con icona, titolo modificabile e menu (rinomina, du
 - Pulsante "Vedi JSON": mostra in sola lettura l'`ArchitectureDoc` esattamente come lo riceve Claude.
 - Quando Claude scrive: nodi e relazioni aggiunti vengono evidenziati per qualche secondo; quelli rimossi spariscono con una dissolvenza.
 
+### 8.5 Cartella (aggiunta dopo M6, "M6.5")
+- Una cartella del progetto scelta con un dialog (tasto `F`), mostrata come albero dei suoi file `.md`/`.mdx` (fino a 4 sottocartelle, max 500 file, senza cartelle nascoste, `node_modules`, `.git`, `.plancia`, symlink).
+- Sulla lavagna albero + anteprima del file selezionato; in modalità focus albero + editor (come un panel Markdown). "Apri come panel" crea un panel Markdown del singolo file.
+- Freccia Cartella → Claude: indice nel contesto + file piccoli; gli altri con `read_panel(panelId, path)`. Freccia Claude → Cartella: modifica e crea `.md` (`write_panel` con `path`, `baseVersion` 0 per i nuovi), non cancella. Senza freccia di scrittura i `.md` della cartella sono protetti nel `PreToolUse`.
+- Eliminare il panel non cancella file.
+
 ### 8.4 Codice (sola visualizzazione)
 - Nessun handle di connessione.
 - `follow: "all-agents"` (default) oppure un terminale specifico (menu a tendina).
@@ -450,6 +456,10 @@ Regole della sezione 6 (con test), resa grafica delle frecce, tool MCP completi 
 ### M6 — Panel Architettura
 Editor in modalità focus, anteprima SVG, `ArchitectureDoc` con zod, `read_panel`/`write_panel`/`get_panel_schema` per l'architettura, layout automatico dei nodi nuovi, evidenziazione delle modifiche di Claude, "Vedi JSON".
 **Accettazione:** disegna 3 servizi e un database collegati; collegalo in lettura e chiedi a Claude di creare lo scaffold delle cartelle dei servizi → rispetta nomi e relazioni del diagramma. Collegalo in scrittura e chiedi "aggiungi una coda tra API e worker" → il diagramma si aggiorna con nodi posizionati in modo sensato; un JSON non valido viene rifiutato con un messaggio leggibile.
+
+### M6.5 — Panel Cartella
+Albero dei `.md` di una cartella, anteprima ed editor, estrazione in panel Markdown, accesso di Claude per cartella (indice nel contesto, `path` nei tool MCP, creazione di file).
+**Accettazione:** collega `docs/` in lettura e chiedi quale package manager usare e cosa resta nel piano → Claude risponde dai file senza che li nomini. Aggiungi la freccia in scrittura e chiedi un nuovo ADR e una voce spuntata nel piano → il file nuovo compare nell'albero, il piano si aggiorna, entrambi segnati come modificati da Claude.
 
 ### M7 — Panel Codice
 Feed dei file modificati dal `PostToolUse`, filtro per terminale, Monaco in sola lettura, diff rispetto a `HEAD`, aggiornamento in tempo reale, apertura manuale di un file.
@@ -525,6 +535,7 @@ plancia/
 | M4 Markdown | fatto | Monaco 0.57 (locale, lazy) + react-markdown/GFM, chokidar 5, versioni per panel, autosalvataggio 500 ms, conflitti. Verificati: modifica esterna di `AGENTS.md` → il panel si aggiorna; modifica nel panel → il file si aggiorna; conflitto con bozza non salvata. |
 | M5 Connessioni | fatto | Scenario di accettazione superato con Claude Code 2.1.310: (1) Markdown → Claude: alla domanda sulle regole Claude cita pnpm senza che il file venga nominato; (2) richiesta di scrittura in sola lettura: `write_panel` rifiutato, Claude lo spiega, file intatto; (3) con la freccia Claude → Markdown il file si aggiorna, il panel lampeggia, il filo diventa viola e si anima, "Annulla" ripristina; (4) tolte le frecce, al messaggio dopo Claude dice di non avere più panel collegati. |
 | M6 Architettura | fatto | `ArchitectureDoc` con zod (controlli incrociati, errori leggibili), dagre 3.1 per i nodi nuovi, anteprima SVG, editor React Flow in modalità focus, "Vedi JSON", `get_panel_schema`. Scenario di accettazione superato con Claude Code 2.1.310: disegnati client, API, 3 servizi e Postgres e collegato in lettura, Claude ha creato una cartella per ogni servizio con gli id e le relazioni del diagramma; con la freccia in scrittura, "aggiungi una coda tra API e worker" ha aggiunto il nodo `coda` e le due relazioni senza spostare i nodi esistenti (panel lampeggiante, "Annulla" funzionante); una relazione verso un nodo inesistente è stata rifiutata con `to: il nodo "fantasma" non esiste → at edges[8].to`, versione invariata. |
+| M6.5 Cartella | fatto | `FolderService` (indice, chokidar sulla cartella, versioni per file) sopra `MarkdownService` esteso per file (eco, Annulla e attribuzione condivisi con i panel Markdown). Accettazione superata con Claude Code 2.1.310: con `docs/` in lettura Claude ha risposto "pnpm" e le due voci aperte del piano senza usare strumenti; con la freccia in scrittura ha creato `adr/0002-coda.md` e spuntato la voce nel piano (versione 2), con il pallino "modificato da Claude" su entrambi i file. |
 | M7 Codice | da fare | |
 
 ---
@@ -583,4 +594,5 @@ plancia/
 - [x] **Vita del file `.arch.json`** (M6): creato vuoto con il panel (sovrascrivendo eventuali avanzi con lo stesso id), copiato con "Duplica", cancellato con il panel. Per questo eliminare un'architettura non vuota chiede conferma. Le modifiche fatte a mano al file con l'app aperta non vengono osservate (il file è dati dell'app, non del progetto).
 - [x] **Id dei nodi** (M6): un nodo aggiunto dall'editor prende un id provvisorio dal tipo (`servizio-2`); quando lo si nomina, l'id diventa lo slug del nome, ma solo finché nessuna relazione lo usa. Dopo resta stabile, perché è il riferimento che Claude usa tra una versione e l'altra.
 - [x] **Collegare nodi nell'editor** (M6): oltre al rilascio su un pallino (raggio di React Flow), vale il rilascio sul corpo del nodo (`onConnectEnd` + `elementFromPoint`). Il canvas dell'editor sta dentro `.nokey`, quindi Canc/Backspace sono gestiti dall'editor stesso.
+- [x] **Panel Cartella** (M6.5, aggiunto alla spec su richiesta): scelte dell'utente — solo `.md` con sottocartelle; nel contesto indice + file piccoli; Claude modifica e crea ma non cancella; albero con anteprima ed estrazione. Dettagli: un file mostrato da una cartella e da un panel Markdown è uno solo (stessa versione, stesso Annulla); le frecce si sommano (basta una freccia di scrittura verso uno dei panel che lo mostrano, prima serviva su tutti); un file in due cartelle collegate entra nel contesto una volta sola; le versioni dei file delle cartelle vivono in memoria (il panel ha comunque la sua versione salvata, che sale a ogni cambio). "Nuovo file" dall'interfaccia non c'è ancora (`window.prompt` non esiste in Electron): i file nuovi li crea Claude o l'editor esterno.
 - [ ] Possibili miglioramenti dopo l'MVP: pulsante "Riordina" (dagre su tutto il diagramma), unione tra modifiche locali non ancora salvate e scrittura di Claude (oggi vince Claude e compare un avviso).

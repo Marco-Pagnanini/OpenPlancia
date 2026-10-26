@@ -1,6 +1,7 @@
 import {
   CodeIcon,
   FileTextIcon,
+  FolderSimpleIcon,
   RobotIcon,
   TerminalWindowIcon,
   TreeStructureIcon,
@@ -18,5 +19,7 @@ export function panelIcon(type: PanelType, mode?: TerminalMode): Icon {
       return TreeStructureIcon;
     case 'code':
       return CodeIcon;
+    case 'folder':
+      return FolderSimpleIcon;
   }
 }

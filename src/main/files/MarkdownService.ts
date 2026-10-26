@@ -26,6 +26,18 @@ export interface MarkdownServiceOptions {
   watch: (paths: string[]) => void;
   /** The content of a panel changed other than by its own save (outside editor, Claude, undo). */
   onExternalChange: (id: string, change: MarkdownChange) => void;
+  /** Files followed by someone else too (the folder panels), besides the markdown panels. */
+  tracks?: (path: string) => boolean;
+  /**
+   * Any change of a tracked file, whoever made it; `origin` is the one passed to writePath.
+   * Folder panels keep their own versions from this.
+   */
+  onPathChanged?: (
+    path: string,
+    content: string | null,
+    extra: Omit<MarkdownChange, 'doc'>,
+    origin?: string,
+  ) => void;
   now?: () => number;
 }
 
@@ -37,6 +49,10 @@ const CLAUDE_WRITE_WINDOW_MS = 30_000;
 interface UndoEntry {
   content: string | null;
   author: string;
+}
+
+function nothingToUndo(): MarkdownUndoResult {
+  return { ok: false, message: 'Niente da annullare' };
 }
 
 function isMissing(err: unknown): boolean {
@@ -101,6 +117,10 @@ export class MarkdownService {
     };
   }
 
+  private isTracked(path: string): boolean {
+    return this.byPath.has(path) || (this.options.tracks?.(path) ?? false);
+  }
+
   private pushHistory(path: string, entry: UndoEntry): void {
     const stack = this.history.get(path) ?? [];
     stack.push(entry);
@@ -114,6 +134,7 @@ export class MarkdownService {
     content: string | null,
     extra: Omit<MarkdownChange, 'doc'>,
     skip?: string,
+    origin?: string,
   ) {
     let skipped = -1;
     for (const id of this.byPath.get(path) ?? []) {
@@ -121,6 +142,7 @@ export class MarkdownService {
       if (id === skip) skipped = version;
       else this.options.onExternalChange(id, { doc: this.doc(path, content, version), ...extra });
     }
+    this.options.onPathChanged?.(path, content, extra, origin);
     return skipped;
   }
 
@@ -139,8 +161,10 @@ export class MarkdownService {
       }
     }
     this.byPath = byPath;
-    for (const path of [...this.known.keys()]) if (!byPath.has(path)) this.known.delete(path);
-    for (const path of [...this.history.keys()]) if (!byPath.has(path)) this.history.delete(path);
+    for (const path of [...this.known.keys()]) if (!this.isTracked(path)) this.known.delete(path);
+    for (const path of [...this.history.keys()]) {
+      if (!this.isTracked(path)) this.history.delete(path);
+    }
     this.options.watch([...byPath.keys()]);
   }
 
@@ -196,18 +220,52 @@ export class MarkdownService {
   /** Restores the content before Claude's last write to this panel's file. */
   async undo(id: string): Promise<MarkdownUndoResult> {
     try {
-      const panel = this.panel(id);
-      const path = await this.pathOf(panel);
-      const entry = this.history.get(path)?.pop();
-      if (!entry) return { ok: false, message: 'Niente da annullare' };
-      const content = entry.content ?? '';
-      this.known.set(path, content);
-      await writeFileAtomic(path, content);
-      this.broadcast(path, content, { undone: true });
-      return { ok: true, version: this.panel(id).version };
+      const path = await this.pathOf(this.panel(id));
+      const undone = await this.undoPath(path);
+      return undone ? { ok: true, version: this.panel(id).version } : nothingToUndo();
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  // File-level operations, for files shown by a folder panel (`path` already checked).
+
+  /** Current content of a file (null = missing), remembered to recognise our own echoes. */
+  async readPath(path: string): Promise<string | null> {
+    const content = await this.load(path);
+    this.known.set(path, content);
+    return content;
+  }
+
+  canUndoPath(path: string): boolean {
+    return (this.history.get(path)?.length ?? 0) > 0;
+  }
+
+  /**
+   * Writes a file and tells every view of it. With `author` the previous content is kept for
+   * undo. `origin` comes back in onPathChanged, so the writer can skip its own echo.
+   */
+  async writePath(path: string, content: string, author?: string, origin?: string): Promise<void> {
+    if (author) {
+      const previous = this.known.has(path)
+        ? (this.known.get(path) ?? null)
+        : await this.load(path);
+      this.pushHistory(path, { content: previous, author });
+    }
+    this.known.set(path, content);
+    await writeFileAtomic(path, content);
+    this.broadcast(path, content, author ? { author } : {}, undefined, origin);
+  }
+
+  /** Restores the content before Claude's last write; false when there is nothing to undo. */
+  async undoPath(path: string): Promise<boolean> {
+    const entry = this.history.get(path)?.pop();
+    if (!entry) return false;
+    const content = entry.content ?? '';
+    this.known.set(path, content);
+    await writeFileAtomic(path, content);
+    this.broadcast(path, content, { undone: true });
+    return true;
   }
 
   /**
@@ -215,14 +273,13 @@ export class MarkdownService {
    * Returns the panels showing it (empty when the file is not on the board).
    */
   expectClaudeWrite(path: string, terminalId: string): string[] {
-    const ids = this.byPath.get(path) ?? [];
-    if (ids.length > 0) this.expected.set(path, { terminalId, at: this.now() });
-    return ids;
+    if (this.isTracked(path)) this.expected.set(path, { terminalId, at: this.now() });
+    return this.byPath.get(path) ?? [];
   }
 
   /** Called by the file watcher. Ignores events caused by our own writes. */
   async fileChanged(path: string): Promise<void> {
-    if (!this.byPath.has(path)) return;
+    if (!this.isTracked(path)) return;
     let content: string | null;
     try {
       content = await this.load(path);
