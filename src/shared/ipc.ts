@@ -43,6 +43,16 @@ export const IpcChannels = {
   architectureUndo: 'plancia:architecture:undo',
   /** main → renderer: Claude changed an architecture, or a change was undone. */
   architectureChanged: 'plancia:architecture:changed',
+  folderCreate: 'plancia:folder:create',
+  folderIndex: 'plancia:folder:index',
+  folderRead: 'plancia:folder:read',
+  folderWrite: 'plancia:folder:write',
+  folderUndo: 'plancia:folder:undo',
+  folderExtract: 'plancia:folder:extract',
+  /** main → renderer: the list of files of a folder panel changed. */
+  folderIndexChanged: 'plancia:folder:index-changed',
+  /** main → renderer: a file of a folder panel changed outside the panel. */
+  folderFileChanged: 'plancia:folder:file-changed',
   activityList: 'plancia:activity:list',
   /** main → renderer: an activity entry was added or updated. */
   activityEvent: 'plancia:activity:event',
@@ -173,6 +183,37 @@ export type ArchitectureWriteResult =
 
 export type ArchitectureUndoResult = MarkdownUndoResult;
 
+/** A markdown file of a folder panel. */
+export interface FolderFile {
+  /** Relative to the folder, with "/" separators. */
+  path: string;
+  /** First "# " heading, or the file name. */
+  title: string;
+  chars: number;
+  /** +1 on every change of the file while the app runs. */
+  version: number;
+}
+
+export interface FolderIndex {
+  dirPath: string;
+  exists: boolean;
+  files: FolderFile[];
+  /** More files than the limit: the rest is not listed. */
+  truncated: boolean;
+}
+
+export interface FolderIndexEvent {
+  id: string;
+  index: FolderIndex;
+}
+
+export interface FolderFileChangedEvent extends MarkdownDoc {
+  id: string;
+  path: string;
+  author?: string | undefined;
+  undone?: boolean | undefined;
+}
+
 export interface PlanciaApi {
   ping(): Promise<PingResponse>;
   workspace: {
@@ -214,6 +255,23 @@ export interface PlanciaApi {
     onChanged(listener: (event: MarkdownChangedEvent) => void): () => void;
     /** Restores the content before Claude's last write. */
     undo(id: string): Promise<MarkdownUndoResult>;
+  };
+  folder: {
+    /** Shows the native folder dialog and creates the panel at `position`. */
+    create(request: { position: Position }): Promise<MarkdownCreateResult>;
+    index(id: string): Promise<FolderIndex>;
+    read(id: string, path: string): Promise<MarkdownDoc>;
+    write(
+      id: string,
+      path: string,
+      content: string,
+      baseVersion: number,
+    ): Promise<MarkdownWriteResult>;
+    undo(id: string, path: string): Promise<MarkdownUndoResult>;
+    /** Opens one file of the folder as its own markdown panel. */
+    extract(id: string, path: string): Promise<MarkdownCreateResult>;
+    onIndex(listener: (event: FolderIndexEvent) => void): () => void;
+    onFileChanged(listener: (event: FolderFileChangedEvent) => void): () => void;
   };
   architecture: {
     read(id: string): Promise<ArchitectureState>;

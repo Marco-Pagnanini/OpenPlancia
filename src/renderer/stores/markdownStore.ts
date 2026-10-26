@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { MarkdownDoc } from '@shared/ipc';
+import type { MarkdownDoc, MarkdownUndoResult, MarkdownWriteResult } from '@shared/ipc';
 
 /** Autosave delay after the last keystroke (spec §8.2). */
 export const AUTOSAVE_MS = 500;
@@ -31,6 +31,36 @@ interface MarkdownState {
   dismissClaudeEdit(id: string): void;
 }
 
+/** Key of a file of a folder panel in this store; markdown panels use their own id. */
+export function folderFileKey(folderId: string, path: string): string {
+  return `${folderId}::${path}`;
+}
+
+interface DocBackend {
+  read(): Promise<MarkdownDoc>;
+  write(content: string, baseVersion: number): Promise<MarkdownWriteResult>;
+  undo(): Promise<MarkdownUndoResult>;
+}
+
+/** Where a document lives: a markdown panel's file, or a file of a folder panel. */
+function backend(key: string): DocBackend {
+  const split = key.indexOf('::');
+  if (split < 0) {
+    return {
+      read: () => window.plancia.markdown.read(key),
+      write: (content, version) => window.plancia.markdown.write(key, content, version),
+      undo: () => window.plancia.markdown.undo(key),
+    };
+  }
+  const id = key.slice(0, split);
+  const path = key.slice(split + 2);
+  return {
+    read: () => window.plancia.folder.read(id, path),
+    write: (content, version) => window.plancia.folder.write(id, path, content, version),
+    undo: () => window.plancia.folder.undo(id, path),
+  };
+}
+
 function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 }
@@ -45,7 +75,7 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
     const doc = docs[id];
     if (content === undefined || !doc || conflicts[id]) return;
     set((s) => ({ saveState: { ...s.saveState, [id]: 'saving' } }));
-    const result = await window.plancia.markdown.write(id, content, doc.version);
+    const result = await backend(id).write(content, doc.version);
     set((s) => {
       if (result.ok) {
         // Keep typing that happened during the write as a draft.
@@ -98,7 +128,7 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
     claudeEdits: {},
 
     init() {
-      return window.plancia.markdown.onChanged(({ id, author, undone, ...doc }) =>
+      const changed = (id: string, doc: MarkdownDoc, author?: string, undone?: boolean) =>
         set((s) => {
           const draft = s.drafts[id];
           const conflict = draft !== undefined && draft !== doc.content;
@@ -114,13 +144,23 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
             drafts: conflict ? s.drafts : omit(s.drafts, id),
             conflicts: conflict ? { ...s.conflicts, [id]: true } : s.conflicts,
           };
-        }),
+        });
+      const offMarkdown = window.plancia.markdown.onChanged(({ id, author, undone, ...doc }) =>
+        changed(id, doc, author, undone),
       );
+      const offFolder = window.plancia.folder.onFileChanged(
+        ({ id, path, author, undone, ...doc }) =>
+          changed(folderFileKey(id, path), doc, author, undone),
+      );
+      return () => {
+        offMarkdown();
+        offFolder();
+      };
     },
 
     async load(id) {
       try {
-        const doc = await window.plancia.markdown.read(id);
+        const doc = await backend(id).read();
         set((s) => ({ docs: { ...s.docs, [id]: doc }, errors: omit(s.errors, id) }));
       } catch (err) {
         set((s) => ({
@@ -155,7 +195,7 @@ export const useMarkdownStore = create<MarkdownState>()((set, get) => {
     },
 
     async undo(id) {
-      const result = await window.plancia.markdown.undo(id);
+      const result = await backend(id).undo();
       if (!result.ok) set((s) => ({ errors: { ...s.errors, [id]: result.message } }));
     },
 

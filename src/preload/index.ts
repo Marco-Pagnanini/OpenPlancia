@@ -3,6 +3,8 @@ import {
   IpcChannels,
   type ArchitectureChangedEvent,
   type ConnectionUse,
+  type FolderFileChangedEvent,
+  type FolderIndexEvent,
   type MarkdownChangedEvent,
   type PlanciaApi,
   type TerminalDataEvent,
@@ -54,6 +56,18 @@ const api: PlanciaApi = {
       ipcRenderer.invoke(IpcChannels.markdownWrite, { id, content, baseVersion }),
     onChanged: (listener) => subscribe<MarkdownChangedEvent>(IpcChannels.markdownChanged, listener),
     undo: (id) => ipcRenderer.invoke(IpcChannels.markdownUndo, { id }),
+  },
+  folder: {
+    create: (request) => ipcRenderer.invoke(IpcChannels.folderCreate, request),
+    index: (id) => ipcRenderer.invoke(IpcChannels.folderIndex, { id }),
+    read: (id, path) => ipcRenderer.invoke(IpcChannels.folderRead, { id, path }),
+    write: (id, path, content, baseVersion) =>
+      ipcRenderer.invoke(IpcChannels.folderWrite, { id, path, content, baseVersion }),
+    undo: (id, path) => ipcRenderer.invoke(IpcChannels.folderUndo, { id, path }),
+    extract: (id, path) => ipcRenderer.invoke(IpcChannels.folderExtract, { id, path }),
+    onIndex: (listener) => subscribe<FolderIndexEvent>(IpcChannels.folderIndexChanged, listener),
+    onFileChanged: (listener) =>
+      subscribe<FolderFileChangedEvent>(IpcChannels.folderFileChanged, listener),
   },
   architecture: {
     read: (id) => ipcRenderer.invoke(IpcChannels.architectureRead, { id }),

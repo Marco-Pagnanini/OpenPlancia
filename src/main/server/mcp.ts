@@ -4,13 +4,14 @@ import type { ToolResult } from '../access/panelTools';
 
 export interface PlanciaMcpDeps {
   listPanels(terminalId: string): ToolResult;
-  readPanel(terminalId: string, panelId: string): Promise<ToolResult>;
+  readPanel(terminalId: string, panelId: string, path: string | undefined): Promise<ToolResult>;
   writePanel(
     terminalId: string,
     panelId: string,
     baseVersion: number,
     content: unknown,
     mode: 'replace' | 'append' | undefined,
+    path: string | undefined,
   ): Promise<ToolResult>;
   panelSchema(type: string): ToolResult;
   onToolCall(terminalId: string, tool: string): void;
@@ -50,12 +51,20 @@ export function createPlanciaMcpServer(terminalId: string, deps: PlanciaMcpDeps)
     {
       title: 'Leggi un panel collegato',
       description:
-        'Legge il contenuto di un panel collegato in lettura (freccia Panel → Terminale). Restituisce anche la versione, da passare a write_panel come baseVersion.',
-      inputSchema: { panelId: z.string().describe('Id del panel, es. "md-3f2a"') },
+        'Legge il contenuto di un panel collegato in lettura (freccia Panel → Terminale). Restituisce anche la versione, da passare a write_panel come baseVersion. Per un panel cartella senza "path" restituisce l\'elenco dei file .md; con "path" (relativo alla cartella) il contenuto di quel file.',
+      inputSchema: {
+        panelId: z.string().describe('Id del panel, es. "md-3f2a"'),
+        path: z
+          .string()
+          .optional()
+          .describe(
+            'Solo per i panel cartella: file .md relativo alla cartella, es. "adr/0001.md"',
+          ),
+      },
     },
-    async ({ panelId }) => {
+    async ({ panelId, path }) => {
       deps.onToolCall(terminalId, 'read_panel');
-      return reply(await deps.readPanel(terminalId, panelId));
+      return reply(await deps.readPanel(terminalId, panelId, path));
     },
   );
 
@@ -72,11 +81,17 @@ export function createPlanciaMcpServer(terminalId: string, deps: PlanciaMcpDeps)
           .unknown()
           .describe('Testo per i markdown; ArchitectureDoc (oggetto JSON) per le architetture'),
         mode: z.enum(['replace', 'append']).optional(),
+        path: z
+          .string()
+          .optional()
+          .describe(
+            'Solo per i panel cartella: file .md relativo alla cartella; per un file nuovo baseVersion è 0',
+          ),
       },
     },
-    async ({ panelId, baseVersion, content, mode }) => {
+    async ({ panelId, baseVersion, content, mode, path }) => {
       deps.onToolCall(terminalId, 'write_panel');
-      return reply(await deps.writePanel(terminalId, panelId, baseVersion, content, mode));
+      return reply(await deps.writePanel(terminalId, panelId, baseVersion, content, mode, path));
     },
   );
 

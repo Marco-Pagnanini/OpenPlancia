@@ -8,6 +8,7 @@ import { AccessService, PLANCIA_DIR_DENIED } from '../src/main/access/AccessServ
 import { ConnectionLog } from '../src/main/access/ConnectionLog';
 import { PanelTools } from '../src/main/access/panelTools';
 import { ArchitectureService } from '../src/main/architecture/ArchitectureService';
+import { FolderService } from '../src/main/files/FolderService';
 import { MarkdownService, type MarkdownChange } from '../src/main/files/MarkdownService';
 
 let dir: string;
@@ -61,22 +62,37 @@ function setup(connections: Connection[], extraPanels: Panel[] = []) {
     workspace,
     onChange: (event) => archEvents.push(event),
   });
+  // eslint-disable-next-line prefer-const -- assigned after markdown, which needs it lazily
+  let folders: FolderService;
   const markdown = new MarkdownService({
     workspace,
     watch: () => undefined,
+    tracks: (path) => folders.tracks(path),
+    onPathChanged: (path, content, extra, origin) =>
+      folders.pathChanged(path, content, extra, origin),
     onExternalChange: (id, change) => changes.push([id, change]),
+  });
+  const folderEvents: unknown[] = [];
+  folders = new FolderService({
+    workspace,
+    markdown,
+    watch: false,
+    onIndex: () => undefined,
+    onFileChanged: (event) => folderEvents.push(event),
   });
   const access = new AccessService({
     panels: () => panels,
     connections: () => conns,
     root: () => root,
     pathOf: (p) => markdown.pathOf(p),
+    foldersAt: (path) => folders.foldersAt(path),
   });
   const log = new ConnectionLog((u) => uses.push(u));
   const tools = new PanelTools({
     access,
     markdown,
     architecture,
+    folders,
     log,
     panel: (id) => panels.find((p) => p.id === id),
   });
@@ -84,6 +100,8 @@ function setup(connections: Connection[], extraPanels: Panel[] = []) {
     markdown,
     architecture,
     archEvents,
+    folders,
+    folderEvents,
     access,
     tools,
     log,

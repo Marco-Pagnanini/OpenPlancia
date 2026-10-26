@@ -7,7 +7,7 @@ export type ToolItem =
   | { kind: 'mode'; tool: Tool; label: string; key: string; icon: Icon }
   | {
       kind: 'create';
-      type: Exclude<PanelType, 'markdown'>;
+      type: Exclude<PanelType, 'markdown' | 'folder'>;
       mode?: TerminalMode;
       label: string;
       key: string;
@@ -15,6 +15,8 @@ export type ToolItem =
     }
   /** Opens the "new / open file" menu. */
   | { kind: 'markdown'; label: string; key: string; icon: Icon }
+  /** Asks for a folder of the project. */
+  | { kind: 'folder'; label: string; key: string; icon: Icon }
   | { kind: 'separator' };
 
 export const TOOL_ITEMS: ToolItem[] = [
@@ -38,6 +40,7 @@ export const TOOL_ITEMS: ToolItem[] = [
     icon: panelIcon('terminal', 'claude'),
   },
   { kind: 'markdown', label: 'Markdown', key: 'M', icon: panelIcon('markdown') },
+  { kind: 'folder', label: 'Cartella', key: 'F', icon: panelIcon('folder') },
   {
     kind: 'create',
     type: 'architecture',

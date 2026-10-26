@@ -31,7 +31,7 @@ export function useCreatePanel() {
   const dispatch = useWorkspaceStore((s) => s.dispatch);
 
   return useCallback(
-    (type: Exclude<PanelType, 'markdown'>, mode?: TerminalMode) => {
+    (type: Exclude<PanelType, 'markdown' | 'folder'>, mode?: TerminalMode) => {
       void dispatch({
         type: 'createPanel',
         panelType: type,
@@ -53,4 +53,13 @@ export function useCreateMarkdownPanel() {
     },
     [position],
   );
+}
+
+/** Folder panels need a folder of the project: the main process asks with a native dialog. */
+export function useCreateFolderPanel() {
+  const position = useNewPanelPosition();
+  return useCallback(async () => {
+    const result = await window.plancia.folder.create({ position: position('folder') });
+    if (result.status === 'error') useWorkspaceStore.setState({ error: result.message });
+  }, [position]);
 }

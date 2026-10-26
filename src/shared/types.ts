@@ -6,6 +6,7 @@ import type {
   boardIntentSchema,
   codePanelSchema,
   connectionSchema,
+  folderPanelSchema,
   markdownPanelSchema,
   panelTypeSchema,
   persistedBoardSchema,
@@ -41,8 +42,9 @@ export type TerminalRuntime = Pick<TerminalPanel, 'status' | 'currentTool'>;
 export type MarkdownPanel = z.infer<typeof markdownPanelSchema>;
 export type ArchitecturePanel = z.infer<typeof architecturePanelSchema>;
 export type CodePanel = z.infer<typeof codePanelSchema>;
+export type FolderPanel = z.infer<typeof folderPanelSchema>;
 
-export type Panel = TerminalPanel | MarkdownPanel | ArchitecturePanel | CodePanel;
+export type Panel = TerminalPanel | MarkdownPanel | ArchitecturePanel | CodePanel | FolderPanel;
 
 export type Connection = z.infer<typeof connectionSchema>;
 

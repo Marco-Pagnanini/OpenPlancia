@@ -51,6 +51,21 @@ describe('BoardStore', () => {
     expect(panels.every((p) => p.updatedAt === NOW.toISOString())).toBe(true);
   });
 
+  it('creates folder panels named after the folder, and only with a folder', () => {
+    const store = makeStore();
+    store.apply({ type: 'createPanel', panelType: 'folder', position: at, dirPath: 'docs/adr' });
+    store.apply({ type: 'createPanel', panelType: 'folder', position: at, dirPath: '.' });
+    expect(store.getBoard().panels.map((p) => [p.id.split('-')[0], p.title])).toEqual([
+      ['dir', 'adr/'],
+      ['dir', 'Progetto/'],
+    ]);
+    expect(store.getBoard().panels[0]).toMatchObject({ type: 'folder', dirPath: 'docs/adr' });
+    expect(() => store.apply({ type: 'createPanel', panelType: 'folder', position: at })).toThrow(
+      BoardError,
+    );
+    expect(persistedBoardSchema.safeParse(toPersisted(store.getBoard())).success).toBe(true);
+  });
+
   it('numbers duplicate default titles', () => {
     const store = makeStore();
     for (let i = 0; i < 3; i++)

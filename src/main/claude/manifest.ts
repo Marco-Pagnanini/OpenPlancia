@@ -14,10 +14,14 @@ export interface ManifestEntry {
   type: PanelType;
   title: string;
   filePath?: string | undefined;
+  /** Folder panels: the folder, relative to the root. */
+  dirPath?: string | undefined;
   access: Access;
   version: number;
   /** Text Claude may see inline: only for readable panels whose content can be inlined. */
   content?: string | undefined;
+  /** Folder panels: version of each file, to tell which ones changed. */
+  files?: Record<string, number> | undefined;
 }
 
 const TOOLS_LINE =
@@ -26,9 +30,11 @@ const TOOLS_LINE =
 function describePanel(entry: ManifestEntry): string {
   const kind = entry.filePath
     ? `${entry.type}, file ${entry.filePath}`
-    : entry.type === 'architecture'
-      ? 'architecture, JSON ArchitectureDoc'
-      : entry.type;
+    : entry.dirPath
+      ? `folder, cartella ${entry.dirPath === '.' ? 'del progetto' : `${entry.dirPath}/`}, file .md`
+      : entry.type === 'architecture'
+        ? 'architecture, JSON ArchitectureDoc'
+        : entry.type;
   return `- ${entry.id} "${entry.title}" (${kind}) · accesso: ${accessLabel(entry.access)} · versione ${entry.version}`;
 }
 
@@ -83,16 +89,40 @@ export function renderManifest(entries: ManifestEntry[], changes: string[] = [])
 /** What the last injected manifest said, per panel. */
 export type ManifestState = Record<
   string,
-  { title: string; version: number; read: boolean; write: boolean }
+  {
+    title: string;
+    version: number;
+    read: boolean;
+    write: boolean;
+    files?: Record<string, number> | undefined;
+  }
 >;
 
 export function manifestState(entries: ManifestEntry[]): ManifestState {
   return Object.fromEntries(
     entries.map((e) => [
       e.id,
-      { title: e.title, version: e.version, read: e.access.read, write: e.access.write },
+      {
+        title: e.title,
+        version: e.version,
+        read: e.access.read,
+        write: e.access.write,
+        files: e.files,
+      },
     ]),
   );
+}
+
+/** "PLAN.md v6 → v7, nuovo adr/0003.md, rimosso old.md": what changed inside a folder. */
+function describeFiles(before: Record<string, number>, after: Record<string, number>): string[] {
+  const changes: string[] = [];
+  for (const [path, version] of Object.entries(after)) {
+    const old = before[path];
+    if (old === undefined) changes.push(`nuovo ${path}`);
+    else if (old !== version) changes.push(`${path} v${old} → v${version}`);
+  }
+  for (const path of Object.keys(before)) if (!(path in after)) changes.push(`rimosso ${path}`);
+  return changes;
 }
 
 /** Differences that matter to Claude: arrows added/removed/changed, new versions of readable panels. */
@@ -108,7 +138,12 @@ export function describeChanges(previous: ManifestState, next: ManifestState): s
       changes.push(`accesso a ${now.title}: ${accessLabel(before)} → ${accessLabel(now)}`);
     }
     if (now.read && before.version !== now.version) {
-      changes.push(`${now.title} (v${before.version} → v${now.version})`);
+      const files = before.files && now.files ? describeFiles(before.files, now.files) : [];
+      changes.push(
+        files.length > 0
+          ? `${now.title}: ${files.join(', ')}`
+          : `${now.title} (v${before.version} → v${now.version})`,
+      );
     }
   }
   for (const [id, before] of Object.entries(previous)) {
@@ -148,6 +183,7 @@ export async function collectManifestEntries(
   panels: Panel[],
   connections: Connection[],
   readContent: (panel: Panel) => Promise<string | undefined>,
+  fileVersions?: (panel: Panel) => Record<string, number> | undefined,
 ): Promise<ManifestEntry[]> {
   const linked = connectedPanels(terminalId, panels, connections);
   return Promise.all(
@@ -156,9 +192,11 @@ export async function collectManifestEntries(
       type: panel.type,
       title: panel.title,
       filePath: panel.type === 'markdown' ? panel.filePath : undefined,
+      dirPath: panel.type === 'folder' ? panel.dirPath : undefined,
       access,
       version: panel.version,
       content: access.read ? await readContent(panel).catch(() => undefined) : undefined,
+      files: panel.type === 'folder' ? fileVersions?.(panel) : undefined,
     })),
   );
 }

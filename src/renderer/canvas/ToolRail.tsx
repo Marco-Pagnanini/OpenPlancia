@@ -2,7 +2,7 @@ import { FilePlusIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import { useEffect, useRef } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { TOOL_ITEMS, type ToolItem } from './tools';
-import { useCreateMarkdownPanel, useCreatePanel } from './useCreatePanel';
+import { useCreateFolderPanel, useCreateMarkdownPanel, useCreatePanel } from './useCreatePanel';
 
 function MarkdownMenu() {
   const setOpen = useUiStore((s) => s.setMarkdownMenu);
@@ -60,6 +60,7 @@ export function ToolRail() {
   const tool = useUiStore((s) => s.tool);
   const setTool = useUiStore((s) => s.setTool);
   const createPanel = useCreatePanel();
+  const createFolder = useCreateFolderPanel();
   const markdownMenu = useUiStore((s) => s.markdownMenu);
   const setMarkdownMenu = useUiStore((s) => s.setMarkdownMenu);
 
@@ -74,7 +75,9 @@ export function ToolRail() {
         ? () => setTool(item.tool)
         : item.kind === 'markdown'
           ? () => setMarkdownMenu(!markdownMenu)
-          : () => createPanel(item.type, item.mode);
+          : item.kind === 'folder'
+            ? () => void createFolder()
+            : () => createPanel(item.type, item.mode);
     const Glyph = item.icon;
     return (
       <div key={item.label} className="relative">

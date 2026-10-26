@@ -36,6 +36,11 @@ function copy(panel: Panel): PlaceholderCopy {
         title: 'Nessun file aperto',
         text: 'Qui vedi il codice che Claude scrive, riga per riga.',
       };
+    case 'folder':
+      return {
+        title: `${panel.dirPath}/`,
+        text: 'I file markdown della cartella, in un solo panel.',
+      };
   }
 }
 

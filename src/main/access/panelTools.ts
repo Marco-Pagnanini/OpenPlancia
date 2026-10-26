@@ -3,6 +3,7 @@ import { accessLabel } from '@shared/access';
 import { architectureDocSchema, formatArchitectureForClaude } from '@shared/architecture';
 import type { Panel } from '@shared/types';
 import type { ArchitectureService } from '../architecture/ArchitectureService';
+import { renderFolderIndex, type FolderService } from '../files/FolderService';
 import type { MarkdownService } from '../files/MarkdownService';
 import { deniedMessage, type AccessService } from './AccessService';
 import type { ConnectionLog } from './ConnectionLog';
@@ -15,6 +16,7 @@ export interface PanelToolsDeps {
   access: AccessService;
   markdown: MarkdownService;
   architecture: Pick<ArchitectureService, 'read' | 'write'>;
+  folders: Pick<FolderService, 'index' | 'read' | 'write'>;
   log: ConnectionLog;
   panel(id: string): Panel | undefined;
 }
@@ -38,6 +40,7 @@ export class PanelTools {
       version: panel.version,
       updatedAt: panel.updatedAt,
       ...(panel.type === 'markdown' ? { filePath: panel.filePath } : {}),
+      ...(panel.type === 'folder' ? this.folderSummary(panel.id, panel.dirPath) : {}),
     }));
     const text =
       panels.length === 0
@@ -48,7 +51,10 @@ export class PanelTools {
 
   private linked(terminalId: string, panelId: string, needed: 'read' | 'write') {
     const panel = this.deps.panel(panelId);
-    if (!panel || (panel.type !== 'markdown' && panel.type !== 'architecture')) {
+    if (
+      !panel ||
+      (panel.type !== 'markdown' && panel.type !== 'architecture' && panel.type !== 'folder')
+    ) {
       return {
         error: `Panel inesistente: ${panelId}. Usa mcp__plancia__list_panels per vedere quelli collegati.`,
       };
@@ -58,11 +64,12 @@ export class PanelTools {
     return { panel };
   }
 
-  async readPanel(terminalId: string, panelId: string): Promise<ToolResult> {
+  async readPanel(terminalId: string, panelId: string, path?: string): Promise<ToolResult> {
     const found = this.linked(terminalId, panelId, 'read');
     if ('error' in found) return { ok: false, error: found.error };
     const { panel } = found;
     if (panel.type === 'architecture') return this.readArchitecture(terminalId, panel);
+    if (panel.type === 'folder') return this.readFolder(terminalId, panel, path);
     if (panel.type !== 'markdown') return failure(new Error(`Panel non leggibile: ${panelId}`));
     let doc;
     try {
@@ -98,10 +105,14 @@ export class PanelTools {
     baseVersion: number,
     content: unknown,
     mode: 'replace' | 'append' = 'replace',
+    path?: string,
   ): Promise<ToolResult> {
     const found = this.linked(terminalId, panelId, 'write');
     if ('error' in found) return { ok: false, error: found.error };
     const { panel } = found;
+    if (panel.type === 'folder') {
+      return this.writeFolder(terminalId, panel, baseVersion, content, mode, path);
+    }
     if (panel.type === 'architecture') {
       if (mode === 'append') {
         return {
@@ -205,6 +216,116 @@ export class PanelTools {
       ok: true,
       text: `Scritto '${panel.title}': versione ${baseVersion} → ${result.version} (${result.doc.nodes.length} nodi, ${result.doc.edges.length} relazioni). I nodi nuovi sono stati posizionati automaticamente.`,
       data: { panelId: panel.id, version: result.version },
+    };
+  }
+
+  private folderSummary(id: string, dirPath: string) {
+    try {
+      return { dirPath, files: this.deps.folders.index(id).files.length };
+    } catch {
+      return { dirPath };
+    }
+  }
+
+  private async readFolder(
+    terminalId: string,
+    panel: Extract<Panel, { type: 'folder' }>,
+    path: string | undefined,
+  ): Promise<ToolResult> {
+    if (!path) {
+      let index;
+      try {
+        index = this.deps.folders.index(panel.id);
+      } catch (err) {
+        return failure(err);
+      }
+      const text = `${renderFolderIndex(panel, index)}\n\nPer leggere un file passa "path" (relativo alla cartella), es. read_panel({ panelId: "${panel.id}", path: "${index.files[0]?.path ?? 'README.md'}" }).`;
+      return { ok: true, text, data: { panelId: panel.id, type: panel.type, index } };
+    }
+    let doc;
+    try {
+      doc = await this.deps.folders.read(panel.id, path);
+    } catch (err) {
+      return failure(err);
+    }
+    this.deps.log.record({
+      terminalId,
+      panelId: panel.id,
+      kind: 'read',
+      via: 'read_panel',
+      version: doc.version,
+      payload: `${path}\n${doc.content}`,
+    });
+    const header = `${panel.title} · ${path} · versione ${doc.version}${doc.exists ? '' : ' · il file non esiste ancora (scrivilo con baseVersion 0)'}`;
+    return {
+      ok: true,
+      text: `${header}\n\n${doc.content}`,
+      data: {
+        panelId: panel.id,
+        type: panel.type,
+        path,
+        version: doc.version,
+        exists: doc.exists,
+        content: doc.content,
+      },
+    };
+  }
+
+  private async writeFolder(
+    terminalId: string,
+    panel: Extract<Panel, { type: 'folder' }>,
+    baseVersion: number,
+    content: unknown,
+    mode: 'replace' | 'append',
+    path: string | undefined,
+  ): Promise<ToolResult> {
+    if (!path) {
+      return {
+        ok: false,
+        error: `Per una cartella serve "path": il file .md da scrivere, relativo alla cartella (anche nuovo, con baseVersion 0).`,
+      };
+    }
+    if (typeof content !== 'string') {
+      return { ok: false, error: `Per un file markdown "content" deve essere testo (string).` };
+    }
+    let next = content;
+    if (mode === 'append') {
+      try {
+        const current = await this.deps.folders.read(panel.id, path);
+        const glue = current.content === '' || current.content.endsWith('\n') ? '' : '\n';
+        next = current.content + glue + content;
+      } catch (err) {
+        return failure(err);
+      }
+    }
+    const result = await this.deps.folders.write(panel.id, path, next, baseVersion, terminalId);
+    if (!result.ok && result.code === 'conflict') {
+      return {
+        ok: false,
+        error: `Conflitto di versione: ${path} è alla versione ${result.doc.version}, la scrittura partiva dalla ${baseVersion}. Rileggi con mcp__plancia__read_panel e riprova.`,
+      };
+    }
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.code === 'error' ? result.message : 'Scrittura non riuscita',
+      };
+    }
+    this.deps.log.record({
+      terminalId,
+      panelId: panel.id,
+      kind: 'write',
+      via: 'write_panel',
+      version: result.version,
+      payload: `${path}\n${next}`,
+    });
+    return {
+      ok: true,
+      text:
+        baseVersion === 0
+          ? `Creato ${path} in '${panel.title}' (versione ${result.version}).`
+          : `Scritto ${path} in '${panel.title}': versione ${baseVersion} → ${result.version}.`,
+      data: { panelId: panel.id, path, version: result.version },
     };
   }
 

@@ -2,7 +2,7 @@ import { useReactFlow } from '@xyflow/react';
 import { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { TOOL_ITEMS } from './tools';
-import { useCreatePanel } from './useCreatePanel';
+import { useCreateFolderPanel, useCreatePanel } from './useCreatePanel';
 
 /**
  * True when the key belongs to a text field. Monaco on Chromium edits through an EditContext
@@ -22,6 +22,7 @@ export function isTyping(target: EventTarget | null): boolean {
 export function useShortcuts() {
   const setTool = useUiStore((s) => s.setTool);
   const createPanel = useCreatePanel();
+  const createFolder = useCreateFolderPanel();
   const { fitView } = useReactFlow();
 
   useEffect(() => {
@@ -36,9 +37,10 @@ export function useShortcuts() {
       e.preventDefault();
       if (item.kind === 'mode') setTool(item.tool);
       else if (item.kind === 'markdown') useUiStore.getState().setMarkdownMenu(true);
+      else if (item.kind === 'folder') void createFolder();
       else createPanel(item.type, item.mode);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [createPanel, fitView, setTool]);
+  }, [createFolder, createPanel, fitView, setTool]);
 }

@@ -24,7 +24,7 @@ export function isClaudeTerminal(panel: Panel | undefined): panel is TerminalPan
 
 /** Panels whose content Claude can read or write through an arrow. */
 export function isDataPanel(panel: Panel | undefined): boolean {
-  return panel?.type === 'markdown' || panel?.type === 'architecture';
+  return panel?.type === 'markdown' || panel?.type === 'architecture' || panel?.type === 'folder';
 }
 
 /** Whether a panel shows connection ports at all. */
