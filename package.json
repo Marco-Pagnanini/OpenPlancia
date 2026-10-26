@@ -22,9 +22,11 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@xyflow/react": "^12.12.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -519,7 +519,7 @@ plancia/
 | Milestone | Stato | Note |
 |---|---|---|
 | M0 Scaffold | fatto | electron-vite 6, Electron 45, React 19, TS 6.0 strict, Tailwind 4, ESLint 10, vitest 5. `window.plancia.ping()` verificato. |
-| M1 Canvas e workspace | da fare | |
+| M1 Canvas e workspace | fatto | React Flow 12 + zustand. Intenti validati con zod nel main (`BoardStore`), snapshot completo al renderer. Salvataggio con debounce 500 ms e flush su `before-quit`. Verificato: 3 panel, chiusura e riapertura con lo stesso layout. |
 | M2 Terminale | da fare | |
 | M3 Server locale e hook | da fare | |
 | M4 Markdown | da fare | |
@@ -541,3 +541,8 @@ plancia/
 - [x] **TypeScript fissato a ~6.0** invece di 7.x: typescript-eslint 8.72 supporta solo TS < 6.1. Da rivalutare quando typescript-eslint supporterà TS 7. In TS 6 `baseUrl` è deprecato: i `paths` sono relativi al tsconfig. (M0)
 - [x] **Preload in CJS** (`out/preload/index.cjs`): con `sandbox: true` il preload non può essere un modulo ES. Main e renderer restano ESM. (M0)
 - [x] Con npm 10.9 lo script di install di `electron` in un caso non ha scaricato il binario (`Error: Electron uninstall` su `npm run dev`). Rimedio: `node node_modules/electron/install.js`. Documentato nel README. (M0)
+- [x] **Logo**: mascotte (struzzo arancione) fornita dall'utente. `resources/icon.png` (icona app, 1024 px su quadrato arrotondato) e `src/renderer/assets/logo.png` (trasparente, 512 px). (M1)
+- [x] **Stato transitorio nel renderer**: durante trascinamento e ridimensionamento React Flow aggiorna posizione e dimensione in locale per fluidità; a fine gesto il renderer invia l'intento (`movePanels`, `resizePanel`) e il main rimanda lo snapshot autorevole. Selezione e drag in corso restano solo UI. (M1)
+- [x] **Viewport salvato** in `board.json` (`viewport`, opzionale): non era nella spec ma serve a ritrovare lo "stesso layout". L'intento `setViewport` salva ma non rimanda lo snapshot. (M1)
+- [x] **Panel Markdown segnaposto**: in M1 punta a `AGENTS.md` senza creare il file; in M4 "Nuovo file markdown" / "Apri markdown" sostituiscono questo default. (M1)
+- [x] **board.json corrotto o di versione più recente**: la cartella non viene aperta (nessuna sovrascrittura) e l'errore è mostrato all'utente; resta aperto il workspace precedente. (M1)
