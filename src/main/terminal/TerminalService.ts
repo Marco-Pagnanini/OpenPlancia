@@ -23,6 +23,8 @@ export interface TerminalServiceOptions {
   /** Writes the per-terminal MCP config and hook settings (fresh token each launch). */
   prepareClaude?: (id: string) => Promise<RunFiles>;
   newSessionId?: () => string;
+  /** Whether Claude Code has a conversation to resume for this session id. */
+  sessionExists?: (sessionId: string, env: Env) => Promise<boolean>;
 }
 
 /** Size used when the main process starts a terminal on its own; the renderer fits it right after. */
@@ -126,8 +128,13 @@ export class TerminalService {
       const sessionId = resume ? panel.claudeSessionId : this.newSessionId();
       if (!sessionId) throw new StartError('no-session', 'Nessuna sessione da riprendere');
       if (!resume) workspace.setClaudeSessionId(id, sessionId);
+      // A session that never got a message has nothing to resume: start it, with the same id.
+      const resumable = resume && ((await this.options.sessionExists?.(sessionId, env)) ?? true);
       const files = await this.options.prepareClaude?.(id);
-      launch = claudeLaunch(claudePath, claudeArgs(panel, { id: sessionId, resume }, files));
+      launch = claudeLaunch(
+        claudePath,
+        claudeArgs(panel, { id: sessionId, resume: resumable }, files),
+      );
     }
 
     pty.start(id, { ...launch, cwd, env, cols, rows });

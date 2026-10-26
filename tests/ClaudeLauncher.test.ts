@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   claudeArgs,
+  claudeSessionExists,
   hookSettings,
   sessionStartCommand,
   writeRunFiles,
@@ -14,6 +15,18 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'plancia-run-'));
 });
 afterEach(() => rm(dir, { recursive: true, force: true }));
+
+describe('claudeSessionExists', () => {
+  it('finds a saved conversation in any project folder of the Claude config', async () => {
+    const id = '11111111-2222-4333-8444-555555555555';
+    const env = { CLAUDE_CONFIG_DIR: dir };
+    expect(await claudeSessionExists(id, env)).toBe(true); // no projects folder: unknown
+    await mkdir(join(dir, 'projects', '-Users-me-progetto'), { recursive: true });
+    expect(await claudeSessionExists(id, env)).toBe(false);
+    await writeFile(join(dir, 'projects', '-Users-me-progetto', `${id}.jsonl`), '{}\n');
+    expect(await claudeSessionExists(id, env)).toBe(true);
+  });
+});
 
 describe('per-terminal run files', () => {
   it('writes private mcp.json and settings.json plus the shared system prompt', async () => {

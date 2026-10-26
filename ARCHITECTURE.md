@@ -596,7 +596,7 @@ flowchart TB
 | [pty/PtyService.ts](src/main/pty/PtyService.ts) | Gestione dei pseudo-terminali: output raggruppato ogni 8 ms con offset assoluti, buffer di replay (512K) che sopravvive ai riavvii, `stop` = SIGHUP poi SIGKILL, `disposeAll`. Spawn iniettabile (test con PTY finti). |
 | [pty/nodePtySpawn.ts](src/main/pty/nodePtySpawn.ts) | Adattatore verso `node-pty`. |
 | [env/shellEnv.ts](src/main/env/shellEnv.ts) | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di OpenPlancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH. |
-| [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows. |
+| [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows, `claudeSessionExists` (c'è una conversazione salvata da riprendere?). |
 
 ### 12.5 Main — server locale, hook, MCP, attività (M3)
 
@@ -668,7 +668,7 @@ flowchart TB
 | [main.tsx](src/renderer/main.tsx) · [App.tsx](src/renderer/App.tsx) | Avvio React, font (Geist), stili React Flow. `App` sceglie tra schermata iniziale e lavagna, avvia gli store. |
 | [index.css](src/renderer/index.css) | **Token del design** (colori caldi, accento `#D97757`, font) e override di React Flow e xterm. |
 | [canvas/Canvas.tsx](src/renderer/canvas/Canvas.tsx) | La lavagna React Flow: nodi, griglia, minimappa, pan/zoom (rotella = pan, pinch/Ctrl = zoom), conferma prima di eliminare, monta TopBar, ToolRail, zoom, ActivityPanel, FocusOverlay. |
-| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | Logo + OpenPlancia (clic = torna alla schermata iniziale, con conferma se ci sono terminali aperti), nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
+| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | "Riprendi tutti gli agenti (N)" quando ci sono terminali Claude non avviati (dopo la riapertura della lavagna). Logo + OpenPlancia (clic = torna alla schermata iniziale, con conferma se ci sono terminali aperti), nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
 | [canvas/ToolRail.tsx](src/renderer/canvas/ToolRail.tsx) · [tools.ts](src/renderer/canvas/tools.ts) | Barra strumenti verticale: puntatore, sposta lavagna, creazione panel, menu Markdown (nuovo / apri file), tooltip con scorciatoie. |
 | [canvas/useShortcuts.ts](src/renderer/canvas/useShortcuts.ts) | Scorciatoie a un tasto (V, H, T, L, M, A, K, Esc, 0). `isTyping` le disattiva in campi di testo, Monaco (`EditContext`), xterm e `.nokey`, e in modalità focus. |
 | [canvas/useCreatePanel.ts](src/renderer/canvas/useCreatePanel.ts) | Crea un panel al centro della vista, a cascata. `useCreateMarkdownPanel` chiede al main il dialog del file. |
@@ -751,6 +751,7 @@ L'MVP della spec è completo. Prossimo passo discusso: **multi-agente** (frecce 
 
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
+| — | "Riprendi tutti gli agenti" nella barra in alto; ripresa di una sessione senza conversazione salvata = sessione nuova con lo stesso id |
 | M7 | Panel Codice: nuova sezione 10 (feed dal PostToolUse, git in sola lettura, regole), CodeService e GitService nella visione d'insieme, file nuovi in mappa, `PanelPlaceholder` rimosso; roadmap chiusa (MVP completo) |
 | M6.5 | Panel Cartella: nuova sezione 9 (albero, file condivisi con MarkdownService, contesto a indice, permessi sommati), FolderService nella visione d'insieme, file nuovi in mappa; sezioni successive rinumerate |
 | M6 | Panel Architettura: nuova sezione 8 (documento, flusso di scrittura di Claude, regole, costo in token), ArchitectureService nella visione d'insieme, `.arch.json` nei dati, file nuovi in mappa; sezioni successive rinumerate |

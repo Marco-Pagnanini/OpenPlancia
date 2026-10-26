@@ -12,7 +12,7 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-211%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/test-213%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
 [![Stato](https://img.shields.io/badge/stato-MVP%20completo-2EA44F?style=flat-square)](#%EF%B8%8F-roadmap)
 
 [Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
@@ -53,7 +53,7 @@ OpenPlancia mette tutto su una lavagna infinita: ogni terminale, ogni file e ogn
 
 ### 🖥️ Terminali veri sulla tela
 
-Shell e sessioni **Claude Code** in panel spostabili e ridimensionabili (node-pty + xterm). Le sessioni Claude riprendono da dove erano dopo un riavvio (`--resume`), e una shell si converte in Claude con un clic.
+Shell e sessioni **Claude Code** in panel spostabili e ridimensionabili (node-pty + xterm). Le sessioni Claude riprendono da dove erano dopo un riavvio (`--resume`), anche tutte insieme con **Riprendi tutti gli agenti**, e una shell si converte in Claude con un clic.
 
 </td>
 <td width="50%" valign="top">
