@@ -66,7 +66,12 @@ describe('WorkspaceService', () => {
     await first.service.open(project);
     for (const panelType of ['terminal', 'markdown', 'architecture'] as const) {
       expect(
-        first.service.dispatch({ type: 'createPanel', panelType, position: { x: 0, y: 0 } }),
+        first.service.dispatch({
+          type: 'createPanel',
+          panelType,
+          position: { x: 0, y: 0 },
+          ...(panelType === 'markdown' ? { filePath: 'AGENTS.md' } : {}),
+        }),
       ).toEqual({ ok: true });
     }
     const [, md] = first.service.snapshot()!.board.panels;

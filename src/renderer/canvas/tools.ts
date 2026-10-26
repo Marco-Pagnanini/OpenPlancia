@@ -5,7 +5,16 @@ import type { Tool } from '../stores/uiStore';
 
 export type ToolItem =
   | { kind: 'mode'; tool: Tool; label: string; key: string; icon: Icon }
-  | { kind: 'create'; type: PanelType; mode?: TerminalMode; label: string; key: string; icon: Icon }
+  | {
+      kind: 'create';
+      type: Exclude<PanelType, 'markdown'>;
+      mode?: TerminalMode;
+      label: string;
+      key: string;
+      icon: Icon;
+    }
+  /** Opens the "new / open file" menu. */
+  | { kind: 'markdown'; label: string; key: string; icon: Icon }
   | { kind: 'separator' };
 
 export const TOOL_ITEMS: ToolItem[] = [
@@ -28,7 +37,7 @@ export const TOOL_ITEMS: ToolItem[] = [
     key: 'L',
     icon: panelIcon('terminal', 'claude'),
   },
-  { kind: 'create', type: 'markdown', label: 'Markdown', key: 'M', icon: panelIcon('markdown') },
+  { kind: 'markdown', label: 'Markdown', key: 'M', icon: panelIcon('markdown') },
   {
     kind: 'create',
     type: 'architecture',

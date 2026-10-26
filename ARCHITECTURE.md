@@ -1,6 +1,6 @@
 # Architettura di Plancia
 
-> **Aggiornato a: M3** (server locale e hook) · prossima: M4 (panel Markdown)
+> **Aggiornato a: M4** (panel Markdown) · prossima: M5 (connessioni)
 > Questo documento viene aggiornato alla fine di ogni milestone. Specifica di prodotto: [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
 
 Plancia è un'app desktop **Electron**. Non c'è un backend remoto: il "backend" è il **processo main** (Node.js sul computer dell'utente), il "frontend" è il **renderer** (React in una finestra Chromium isolata). I due parlano solo attraverso un'API tipizzata e stretta esposta dal **preload**.
@@ -15,6 +15,7 @@ flowchart LR
     UI["Lavagna React Flow<br/>panel · toolbar · ispettori"]
     ST["Store zustand<br/>specchio dello stato"]
     XT["xterm.js<br/>(registro istanze)"]
+    ED["Monaco + react-markdown<br/>(panel Markdown)"]
   end
 
   subgraph P["Preload"]
@@ -29,6 +30,8 @@ flowchart LR
     HK["hooks.ts"]
     MCP["server MCP 'plancia'"]
     ACT["ActivityLog"]
+    MD["MarkdownService"]
+    FW["FileWatcher<br/>(chokidar)"]
   end
 
   subgraph X["Processi figli"]
@@ -54,18 +57,22 @@ flowchart LR
   SRV --> MCP
   WS <--> DISK
   ACT --> DISK
+  ED <-- "leggi · salva · cambi esterni" --> API
+  API <--> MD
+  MD <--> DISK
+  FW -- "file cambiato" --> MD
 ```
 
 **Regole che tengono in piedi tutto** (spec §3):
 
-| Regola                                                                                   | Dove è applicata                                                                                          |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Regola | Dove è applicata |
+|---|---|
 | Il main è la fonte di verità: il renderer non modifica lo stato da solo, manda _intenti_ | [BoardStore.ts](src/main/board/BoardStore.ts), [workspaceStore.ts](src/renderer/stores/workspaceStore.ts) |
-| Tutto ciò che entra dall'esterno passa da zod (IPC, HTTP, file su disco)                 | [schemas.ts](src/shared/schemas.ts)                                                                       |
-| Renderer isolato: `contextIsolation`, `sandbox`, niente `nodeIntegration`, CSP           | [main/index.ts](src/main/index.ts), [index.html](src/renderer/index.html)                                 |
-| Server solo su `127.0.0.1`, token di 32 byte nel path, controllo Host/Origin             | [LocalServer.ts](src/main/server/LocalServer.ts)                                                          |
-| Nessun percorso fuori dalla cartella progetto (traversal, symlink)                       | [resolveInWorkspace.ts](src/main/files/resolveInWorkspace.ts)                                             |
-| Token e config di runtime mai nel repo                                                   | `userData/run/` — [ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts)                                  |
+| Tutto ciò che entra dall'esterno passa da zod (IPC, HTTP, file su disco) | [schemas.ts](src/shared/schemas.ts) |
+| Renderer isolato: `contextIsolation`, `sandbox`, niente `nodeIntegration`, CSP | [main/index.ts](src/main/index.ts), [index.html](src/renderer/index.html) |
+| Server solo su `127.0.0.1`, token di 32 byte nel path, controllo Host/Origin | [LocalServer.ts](src/main/server/LocalServer.ts) |
+| Nessun percorso fuori dalla cartella progetto (traversal, symlink) | [resolveInWorkspace.ts](src/main/files/resolveInWorkspace.ts) |
+| Token e config di runtime mai nel repo | `userData/run/` — [ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) |
 
 ---
 
@@ -131,13 +138,13 @@ sequenceDiagram
 
 Intenti disponibili (in [schemas.ts](src/shared/schemas.ts) → `boardIntentSchema`):
 
-| Intento                                      | Effetto                                                |
-| -------------------------------------------- | ------------------------------------------------------ |
-| `createPanel`                                | nuovo panel (i terminali partono subito)               |
-| `movePanels` · `resizePanel` · `renamePanel` | geometria e titolo                                     |
-| `duplicatePanel` · `deletePanels`            | duplica / elimina (eliminare chiude anche il processo) |
-| `setViewport`                                | salva pan e zoom (non rimanda lo snapshot)             |
-| `setTerminalMode`                            | converte una shell in terminale Claude                 |
+| Intento | Effetto |
+|---|---|
+| `createPanel` | nuovo panel (i terminali partono subito) |
+| `movePanels` · `resizePanel` · `renamePanel` | geometria e titolo |
+| `duplicatePanel` · `deletePanels` | duplica / elimina (eliminare chiude anche il processo) |
+| `setViewport` | salva pan e zoom (non rimanda lo snapshot) |
+| `setTerminalMode` | converte una shell in terminale Claude |
 
 ---
 
@@ -236,12 +243,58 @@ Lo stato è **solo runtime**: non finisce mai in `board.json` (vedi `toPersisted
 
 ---
 
-## 6. Dove finiscono i dati
+## 6. Panel Markdown (M4)
+
+Un panel Markdown è una **vista su un file vero** del progetto (es. `AGENTS.md`). Il main legge e scrive il file (sempre attraverso `resolveInWorkspace`), chokidar lo osserva, ogni cambiamento aumenta la `version` del panel.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Utente
+  participant ED as MarkdownBody (Monaco)
+  participant MS as markdownStore
+  participant MD as MarkdownService
+  participant FS as File su disco
+  participant FW as FileWatcher
+  participant X as Editor esterno
+
+  U->>ED: scrive
+  ED->>MS: edit(id, testo) → bozza "Modifiche non salvate"
+  Note over MS: autosalvataggio dopo 500 ms (o Cmd+S)
+  MS->>MD: write(id, testo, baseVersion)
+  alt baseVersion uguale alla version del panel
+    MD->>FS: scrittura atomica (ricorda il contenuto)
+    MD-->>MS: ok, version + 1 → "Salvato"
+    FW-->>MD: change (eco della nostra scrittura)
+    MD->>MD: contenuto uguale a quello ricordato → ignorato
+  else il file è cambiato nel frattempo
+    MD-->>MS: conflitto + contenuto attuale
+  end
+
+  X->>FS: modifica AGENTS.md
+  FW-->>MD: change
+  MD->>MD: contenuto diverso → version + 1 per ogni panel sul file
+  MD-->>MS: plancia:markdown:changed
+  alt nessuna bozza locale
+    MS-->>ED: mostra il nuovo contenuto
+  else bozza diversa dal file
+    MS-->>ED: avviso di conflitto (usa la versione su disco / mantieni le mie modifiche)
+  end
+```
+
+Creazione: il pulsante **Markdown** della barra (tasto `M`) apre "Nuovo file…" / "Apri file…". Il dialog nativo è mostrato dal **main**, che controlla che il file sia dentro il progetto, crea il file se nuovo (senza mai sovrascriverne uno esistente) e crea il panel con il percorso relativo.
+
+**Tastiera e editor**: Monaco su Chromium scrive tramite `EditContext` (un `div`, non una `textarea`). Per questo le scorciatoie della lavagna ignorano `.monaco-editor`, `.xterm` e `.nokey`, e il corpo di ogni panel ha la classe `nokey`: React Flow non tratta il Backspace scritto in un editor come "elimina panel".
+
+---
+
+## 7. Dove finiscono i dati
 
 ```mermaid
 flowchart TB
   subgraph PRJ["Cartella progetto (versionabile)"]
-    BJ[".plancia/board.json<br/>panel · posizioni · dimensioni · frecce · viewport · claudeSessionId"]
+    BJ[".plancia/board.json<br/>panel · posizioni · dimensioni · frecce · viewport · claudeSessionId · version"]
+    MDF["file markdown dei panel<br/>(es. AGENTS.md, docs/*.md)"]
   end
   subgraph UD["userData dell'app (privato)"]
     SET["settings.json<br/>ultima cartella aperta"]
@@ -257,132 +310,146 @@ flowchart TB
 
 ---
 
-## 7. Mappa dei file per funzionalità
+## 8. Mappa dei file per funzionalità
 
-### 7.1 Contratto condiviso — `src/shared/`
+### 8.1 Contratto condiviso — `src/shared/`
 
-| File                                  | Cosa contiene                                                                                                                                                                           | Usato da                   |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| [types.ts](src/shared/types.ts)       | Tipi di dominio: `Panel` (terminal/markdown/architecture/code), `Board`, `Connection`, `BoardIntent`, `TerminalRuntime`, `WorkspaceSnapshot`. Derivati dagli schemi zod.                | tutto                      |
-| [schemas.ts](src/shared/schemas.ts)   | Schemi zod di ogni confine: `persistedBoardSchema` (board.json), `boardIntentSchema` (intenti), payload IPC dei terminali, `hookPayloadSchema` (corpo degli hook), `appSettingsSchema`. | main (validazione), test   |
-| [ipc.ts](src/shared/ipc.ts)           | Nomi dei canali IPC (`plancia:*`), tipi dei messaggi e interfaccia `PlanciaApi` = forma di `window.plancia`.                                                                            | main, preload, renderer    |
-| [panels.ts](src/shared/panels.ts)     | Dimensioni predefinite e minime dei panel, titoli predefiniti.                                                                                                                          | BoardStore, renderer       |
-| [activity.ts](src/shared/activity.ts) | `ActivityEvent` (voce della timeline) e stati dei tool (`running/ok/failed/cancelled`).                                                                                                 | ActivityLog, ActivityPanel |
+| File | Cosa contiene | Usato da |
+|---|---|---|
+| [types.ts](src/shared/types.ts) | Tipi di dominio: `Panel` (terminal/markdown/architecture/code), `Board`, `Connection`, `BoardIntent`, `TerminalRuntime`, `WorkspaceSnapshot`. Derivati dagli schemi zod. | tutto |
+| [schemas.ts](src/shared/schemas.ts) | Schemi zod di ogni confine: `persistedBoardSchema` (board.json), `boardIntentSchema` (intenti), payload IPC dei terminali, `hookPayloadSchema` (corpo degli hook), `markdownCreateSchema` / `markdownWriteSchema`, `workspacePathSchema`, `appSettingsSchema`. | main (validazione), test |
+| [ipc.ts](src/shared/ipc.ts) | Nomi dei canali IPC (`plancia:*`), tipi dei messaggi (`MarkdownDoc`, `MarkdownWriteResult`…) e interfaccia `PlanciaApi` = forma di `window.plancia`. | main, preload, renderer |
+| [panels.ts](src/shared/panels.ts) | Dimensioni predefinite e minime dei panel, titoli predefiniti. | BoardStore, renderer |
+| [activity.ts](src/shared/activity.ts) | `ActivityEvent` (voce della timeline) e stati dei tool (`running/ok/failed/cancelled`). | ActivityLog, ActivityPanel |
 
-### 7.2 Main — avvio e IPC
+### 8.2 Main — avvio e IPC
 
-| File                                | Contesto                                                                                                                                                                                                                                                                                                                                                                                           |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [main/index.ts](src/main/index.ts)  | **Punto d'ingresso.** Crea la finestra sicura, istanzia e collega i servizi (WorkspaceService, PtyService, TerminalService, ActivityLog, LocalServer), registra tutti gli handler IPC con validazione zod, avvia il server, ripristina l'ultima cartella, sonda `claude --version`, gestisce l'uscita pulita (chiude i processi, salva, ferma il server). In sviluppo accetta `PLANCIA_USER_DATA`. |
-| [ipc/ping.ts](src/main/ipc/ping.ts) | Handler di prova della M0 (`window.plancia.ping()`).                                                                                                                                                                                                                                                                                                                                               |
+| File | Contesto |
+|---|---|
+| [main/index.ts](src/main/index.ts) | **Punto d'ingresso.** Crea la finestra sicura, istanzia e collega i servizi (WorkspaceService, PtyService, TerminalService, ActivityLog, LocalServer), registra tutti gli handler IPC con validazione zod, avvia il server, ripristina l'ultima cartella, sonda `claude --version`, gestisce l'uscita pulita (chiude i processi, salva, ferma il server). In sviluppo accetta `PLANCIA_USER_DATA`. |
+| [ipc/ping.ts](src/main/ipc/ping.ts) | Handler di prova della M0 (`window.plancia.ping()`). |
 
-### 7.3 Main — lavagna e workspace (M1)
+### 8.3 Main — lavagna e workspace (M1)
 
-| File                                                                    | Contesto                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File | Contesto |
+|---|---|
 | [workspace/WorkspaceService.ts](src/main/workspace/WorkspaceService.ts) | Possiede la cartella aperta: la apre (realpath + controllo), carica `board.json`, crea il `BoardStore`, salva con debounce, ricorda l'ultima cartella, riapre all'avvio. Espone `dispatch` (intenti validati), `onChange`, `onBeforeClose`, `setTerminalRuntime`, `setClaudeSessionId`. Non apre una cartella con board corrotto o di versione più recente. |
-| [board/BoardStore.ts](src/main/board/BoardStore.ts)                     | **Stato della lavagna in memoria**, immutabile. Applica gli intenti (`reduce`), genera id (`term-xxxx`, `md-xxxx`…), titoli unici, limiti di dimensione. Cambi interni: stato runtime dei terminali (non salvato) e id di sessione Claude (salvato). `toPersisted`/`fromPersisted` convertono da/per il disco.                                              |
-| [workspace/boardFile.ts](src/main/workspace/boardFile.ts)               | Lettura/scrittura di `.plancia/board.json`: file mancante = lavagna vuota, JSON o schema non validi = errore leggibile, versione futura = errore.                                                                                                                                                                                                           |
-| [settings/AppSettings.ts](src/main/settings/AppSettings.ts)             | `userData/settings.json` (ultima cartella). Corrotto o assente = impostazioni vuote.                                                                                                                                                                                                                                                                        |
-| [util/atomicWrite.ts](src/main/util/atomicWrite.ts)                     | Scrittura su file temporaneo + rename: mai file scritti a metà.                                                                                                                                                                                                                                                                                             |
-| [util/debounce.ts](src/main/util/debounce.ts)                           | Task asincrono con debounce, senza sovrapposizioni, con `flush` (usato all'uscita).                                                                                                                                                                                                                                                                         |
-| [files/resolveInWorkspace.ts](src/main/files/resolveInWorkspace.ts)     | Risolve un percorso dentro il progetto e rifiuta traversal e symlink che escono, anche per file non ancora creati. Oggi protegge la `cwd` dei terminali; dalla M4 ogni file dei panel.                                                                                                                                                                      |
+| [board/BoardStore.ts](src/main/board/BoardStore.ts) | **Stato della lavagna in memoria**, immutabile. Applica gli intenti (`reduce`), genera id (`term-xxxx`, `md-xxxx`…), titoli unici, limiti di dimensione. Cambi interni: stato runtime dei terminali (non salvato) e id di sessione Claude (salvato). `toPersisted`/`fromPersisted` convertono da/per il disco. |
+| [workspace/boardFile.ts](src/main/workspace/boardFile.ts) | Lettura/scrittura di `.plancia/board.json`: file mancante = lavagna vuota, JSON o schema non validi = errore leggibile, versione futura = errore. |
+| [settings/AppSettings.ts](src/main/settings/AppSettings.ts) | `userData/settings.json` (ultima cartella). Corrotto o assente = impostazioni vuote. |
+| [util/atomicWrite.ts](src/main/util/atomicWrite.ts) | Scrittura su file temporaneo + rename: mai file scritti a metà. |
+| [util/debounce.ts](src/main/util/debounce.ts) | Task asincrono con debounce, senza sovrapposizioni, con `flush` (usato all'uscita). |
+| [files/resolveInWorkspace.ts](src/main/files/resolveInWorkspace.ts) | Risolve un percorso dentro il progetto e rifiuta traversal e symlink che escono, anche per file non ancora creati. Oggi protegge la `cwd` dei terminali; dalla M4 ogni file dei panel. |
 
-### 7.4 Main — terminali (M2)
+### 8.4 Main — terminali (M2)
 
-| File                                                                | Contesto                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File | Contesto |
+|---|---|
 | [terminal/TerminalService.ts](src/main/terminal/TerminalService.ts) | **Collega panel e processi.** Avvia (shell o Claude, nuova sessione o `--resume`), avvia da solo i terminali appena creati, chiude il processo quando il panel viene eliminato, riavvia alla conversione shell → Claude, ferma tutto alla chiusura del workspace. Errori chiari (es. Claude non trovato con link d'installazione). |
-| [pty/PtyService.ts](src/main/pty/PtyService.ts)                     | Gestione dei pseudo-terminali: output raggruppato ogni 8 ms con offset assoluti, buffer di replay (512K) che sopravvive ai riavvii, `stop` = SIGHUP poi SIGKILL, `disposeAll`. Spawn iniettabile (test con PTY finti).                                                                                                             |
-| [pty/nodePtySpawn.ts](src/main/pty/nodePtySpawn.ts)                 | Adattatore verso `node-pty`.                                                                                                                                                                                                                                                                                                       |
-| [env/shellEnv.ts](src/main/env/shellEnv.ts)                         | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di Plancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH.                                                                |
-| [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts)       | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows.     |
+| [pty/PtyService.ts](src/main/pty/PtyService.ts) | Gestione dei pseudo-terminali: output raggruppato ogni 8 ms con offset assoluti, buffer di replay (512K) che sopravvive ai riavvii, `stop` = SIGHUP poi SIGKILL, `disposeAll`. Spawn iniettabile (test con PTY finti). |
+| [pty/nodePtySpawn.ts](src/main/pty/nodePtySpawn.ts) | Adattatore verso `node-pty`. |
+| [env/shellEnv.ts](src/main/env/shellEnv.ts) | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di Plancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH. |
+| [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows. |
 
-### 7.5 Main — server locale, hook, MCP, attività (M3)
+### 8.5 Main — server locale, hook, MCP, attività (M3)
 
-| File                                                        | Contesto                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [server/LocalServer.ts](src/main/server/LocalServer.ts)     | Server HTTP su `127.0.0.1` (porta casuale). Rotte `/hooks/:id/:token` e `/mcp/:id/:token`. Token per terminale (32 byte, confronto a tempo costante, rotazione), rifiuta Host estranei e richieste con `Origin`, corpo max 1 MB. Agli hook risponde sempre 2xx: un errore di Plancia non blocca mai Claude.                    |
-| [server/hooks.ts](src/main/server/hooks.ts)                 | **Funzione pura `handleHook`**: da evento Claude a stato del terminale, tool corrente, voci della timeline, notifica "richiede attenzione", aggiornamento dell'id di sessione dopo `/clear`. Gestisce UserPromptSubmit, Pre/PostToolUse(Failure), PermissionDenied, Notification, Stop, StopFailure, SessionStart, SessionEnd. |
-| [server/toolLabel.ts](src/main/server/toolLabel.ts)         | Etichette leggibili dei tool (`Bash: npm test`, `Edit: src/auth.ts`, `plancia › list_panels`) e percorsi relativi al progetto.                                                                                                                                                                                                 |
-| [server/mcp.ts](src/main/server/mcp.ts)                     | Server MCP `plancia` (uno per richiesta, stateless). Oggi: `list_panels` (lista vuota fino alla M5). Elenco dei tool pre-approvati.                                                                                                                                                                                            |
-| [activity/ActivityLog.ts](src/main/activity/ActivityLog.ts) | Timeline per terminale: in memoria + JSONL su disco per workspace, ultimi 500 eventi, scritture in coda, aggiornamento dei tool per `tool_use_id`, tool non conclusi → "annullati".                                                                                                                                            |
-| [resources/plancia-hook.cjs](resources/plancia-hook.cjs)    | Ponte per gli hook `command`: legge l'evento da stdin, lo manda al server, stampa la risposta. Esce sempre con 0.                                                                                                                                                                                                              |
+| File | Contesto |
+|---|---|
+| [server/LocalServer.ts](src/main/server/LocalServer.ts) | Server HTTP su `127.0.0.1` (porta casuale). Rotte `/hooks/:id/:token` e `/mcp/:id/:token`. Token per terminale (32 byte, confronto a tempo costante, rotazione), rifiuta Host estranei e richieste con `Origin`, corpo max 1 MB. Agli hook risponde sempre 2xx: un errore di Plancia non blocca mai Claude. |
+| [server/hooks.ts](src/main/server/hooks.ts) | **Funzione pura `handleHook`**: da evento Claude a stato del terminale, tool corrente, voci della timeline, notifica "richiede attenzione", aggiornamento dell'id di sessione dopo `/clear`. Gestisce UserPromptSubmit, Pre/PostToolUse(Failure), PermissionDenied, Notification, Stop, StopFailure, SessionStart, SessionEnd. |
+| [server/toolLabel.ts](src/main/server/toolLabel.ts) | Etichette leggibili dei tool (`Bash: npm test`, `Edit: src/auth.ts`, `plancia › list_panels`) e percorsi relativi al progetto. |
+| [server/mcp.ts](src/main/server/mcp.ts) | Server MCP `plancia` (uno per richiesta, stateless). Oggi: `list_panels` (lista vuota fino alla M5). Elenco dei tool pre-approvati. |
+| [activity/ActivityLog.ts](src/main/activity/ActivityLog.ts) | Timeline per terminale: in memoria + JSONL su disco per workspace, ultimi 500 eventi, scritture in coda, aggiornamento dei tool per `tool_use_id`, tool non conclusi → "annullati". |
+| [resources/plancia-hook.cjs](resources/plancia-hook.cjs) | Ponte per gli hook `command`: legge l'evento da stdin, lo manda al server, stampa la risposta. Esce sempre con 0. |
 
-### 7.6 Preload
+### 8.6 Main — file e panel Markdown (M4)
 
-| File                                     | Contesto                                                                                                                                                                                                                      |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [preload/index.ts](src/preload/index.ts) | Espone `window.plancia` con `contextBridge`: `workspace`, `board`, `app`, `terminal`, `activity`. Solo chiamate ad alto livello, mai `ipcRenderer` grezzo. Compilato in CommonJS (`index.cjs`) perché la sandbox lo richiede. |
+| File | Contesto |
+|---|---|
+| [files/MarkdownService.ts](src/main/files/MarkdownService.ts) | **Legge e scrive i file dei panel Markdown**: percorso sempre via `resolveInWorkspace`, limite di 2 M caratteri, file mancante = `exists: false` (creato al primo salvataggio). Scrittura con `baseVersion`: se il file è cambiato nel frattempo restituisce il conflitto. Ricorda l'ultimo contenuto di ogni file per riconoscere l'eco delle proprie scritture. Ogni cambiamento → `version + 1` per tutti i panel sullo stesso file. `sync()` ricalcola i file da osservare. |
+| [files/FileWatcher.ts](src/main/files/FileWatcher.ts) | chokidar su un insieme esplicito di file (quelli dei panel), con `atomic` e `awaitWriteFinish`: i salvataggi "file temporaneo + rename" di editor e Plancia arrivano come un solo cambiamento. |
+| [main/index.ts](src/main/index.ts) (parte M4) | Dialog nativo "Nuovo / Apri file markdown" (`createMarkdownPanel`), handler IPC `markdown:*`, sincronizzazione del watcher all'apertura di una cartella e quando si creano, duplicano o eliminano panel. |
 
-### 7.7 Renderer — app e lavagna
+### 8.7 Preload
 
-| File                                                                                               | Contesto                                                                                                                                                                              |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [main.tsx](src/renderer/main.tsx) · [App.tsx](src/renderer/App.tsx)                                | Avvio React, font (Geist), stili React Flow. `App` sceglie tra schermata iniziale e lavagna, avvia gli store.                                                                         |
-| [index.css](src/renderer/index.css)                                                                | **Token del design** (colori caldi, accento `#D97757`, font) e override di React Flow e xterm.                                                                                        |
-| [canvas/Canvas.tsx](src/renderer/canvas/Canvas.tsx)                                                | La lavagna React Flow: nodi, griglia, minimappa, pan/zoom (rotella = pan, pinch/Ctrl = zoom), conferma prima di eliminare, monta TopBar, ToolRail, zoom, ActivityPanel, FocusOverlay. |
-| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx)                                                | Marchio + nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip.                                                                                   |
-| [canvas/ToolRail.tsx](src/renderer/canvas/ToolRail.tsx) · [tools.ts](src/renderer/canvas/tools.ts) | Barra strumenti verticale: puntatore, sposta lavagna, creazione panel, tooltip con scorciatoie.                                                                                       |
-| [canvas/useShortcuts.ts](src/renderer/canvas/useShortcuts.ts)                                      | Scorciatoie a un tasto (V, H, T, L, M, A, K, Esc, 0), disattivate mentre si scrive o in modalità focus.                                                                               |
-| [canvas/useCreatePanel.ts](src/renderer/canvas/useCreatePanel.ts)                                  | Crea un panel al centro della vista, a cascata.                                                                                                                                       |
-| [canvas/ZoomControls.tsx](src/renderer/canvas/ZoomControls.tsx)                                    | − / percentuale / + / adatta.                                                                                                                                                         |
-| [canvas/FocusOverlay.tsx](src/renderer/canvas/FocusOverlay.tsx)                                    | Modalità focus: un panel a schermo pieno al 100%. Esc esce, tranne quando si scrive in un terminale.                                                                                  |
-| [components/](src/renderer/components/)                                                            | `EmptyState` (apri cartella), `ErrorToast`, `Logo`.                                                                                                                                   |
+| File | Contesto |
+|---|---|
+| [preload/index.ts](src/preload/index.ts) | Espone `window.plancia` con `contextBridge`: `workspace`, `board`, `app`, `terminal`, `markdown`, `activity`. Solo chiamate ad alto livello, mai `ipcRenderer` grezzo. Compilato in CommonJS (`index.cjs`) perché la sandbox lo richiede. |
 
-### 7.8 Renderer — panel
+### 8.8 Renderer — app e lavagna
 
-| File                                                                                                                                                  | Contesto                                                                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [panels/PanelNode.tsx](src/renderer/panels/PanelNode.tsx)                                                                                             | **Cornice comune** di ogni panel: header trascinabile (icona, titolo, tipo, stato, tool corrente, Attività, focus, menu, chiudi), ridimensionamento, menu (focus, rinomina, duplica, converti in Claude, ferma, elimina). `PanelContent` sceglie il corpo per tipo. |
-| [panels/StatusBadge.tsx](src/renderer/panels/StatusBadge.tsx) · [panelMeta.ts](src/renderer/panels/panelMeta.ts)                                      | Badge di stato con colori del design; etichette; conferma di eliminazione per processi in esecuzione.                                                                                                                                                               |
-| [panels/PanelIcon.tsx](src/renderer/panels/PanelIcon.tsx) · [panelIcons.ts](src/renderer/panels/panelIcons.ts)                                        | Icone Phosphor per tipo di panel.                                                                                                                                                                                                                                   |
-| [panels/PanelPlaceholder.tsx](src/renderer/panels/PanelPlaceholder.tsx)                                                                               | Corpo provvisorio di Markdown, Architettura, Codice (sostituito da M4, M6, M7).                                                                                                                                                                                     |
-| [panels/terminal/terminalRegistry.ts](src/renderer/panels/terminal/terminalRegistry.ts)                                                               | Istanze xterm fuori da React: replay con offset, fit e resize, link esterni, politica WebGL, ultime righe per l'anteprima.                                                                                                                                          |
-| [panels/terminal/TerminalBody.tsx](src/renderer/panels/terminal/TerminalBody.tsx)                                                                     | Corpo del terminale: schermata di avvio / ripresa, errore (Claude non trovato), xterm, barra "processo terminato".                                                                                                                                                  |
-| [panels/terminal/TerminalPreview.tsx](src/renderer/panels/terminal/TerminalPreview.tsx) · [xtermTheme.ts](src/renderer/panels/terminal/xtermTheme.ts) | Anteprima a zoom basso; tema e font del terminale (con fallback Nerd Font).                                                                                                                                                                                         |
+| File | Contesto |
+|---|---|
+| [main.tsx](src/renderer/main.tsx) · [App.tsx](src/renderer/App.tsx) | Avvio React, font (Geist), stili React Flow. `App` sceglie tra schermata iniziale e lavagna, avvia gli store. |
+| [index.css](src/renderer/index.css) | **Token del design** (colori caldi, accento `#D97757`, font) e override di React Flow e xterm. |
+| [canvas/Canvas.tsx](src/renderer/canvas/Canvas.tsx) | La lavagna React Flow: nodi, griglia, minimappa, pan/zoom (rotella = pan, pinch/Ctrl = zoom), conferma prima di eliminare, monta TopBar, ToolRail, zoom, ActivityPanel, FocusOverlay. |
+| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | Marchio + nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
+| [canvas/ToolRail.tsx](src/renderer/canvas/ToolRail.tsx) · [tools.ts](src/renderer/canvas/tools.ts) | Barra strumenti verticale: puntatore, sposta lavagna, creazione panel, menu Markdown (nuovo / apri file), tooltip con scorciatoie. |
+| [canvas/useShortcuts.ts](src/renderer/canvas/useShortcuts.ts) | Scorciatoie a un tasto (V, H, T, L, M, A, K, Esc, 0). `isTyping` le disattiva in campi di testo, Monaco (`EditContext`), xterm e `.nokey`, e in modalità focus. |
+| [canvas/useCreatePanel.ts](src/renderer/canvas/useCreatePanel.ts) | Crea un panel al centro della vista, a cascata. `useCreateMarkdownPanel` chiede al main il dialog del file. |
+| [canvas/ZoomControls.tsx](src/renderer/canvas/ZoomControls.tsx) | − / percentuale / + / adatta. |
+| [canvas/FocusOverlay.tsx](src/renderer/canvas/FocusOverlay.tsx) | Modalità focus: un panel a schermo pieno al 100%. Esc esce, tranne quando si scrive in un terminale. |
+| [components/](src/renderer/components/) | `EmptyState` (apri cartella), `ErrorToast`, `Logo`. |
 
-### 7.9 Renderer — ispettori e store
+### 8.9 Renderer — panel
 
-| File                                                                      | Contesto                                                                                                       |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [inspectors/ActivityPanel.tsx](src/renderer/inspectors/ActivityPanel.tsx) | Pannello laterale "Attività": timeline cronologica con icone per tipo e stato dei tool.                        |
-| [stores/workspaceStore.ts](src/renderer/stores/workspaceStore.ts)         | Specchio dello snapshot del main + nodi React Flow (selezione e trascinamento solo locali). Manda gli intenti. |
-| [stores/terminalStore.ts](src/renderer/stores/terminalStore.ts)           | Info app (versione Claude), errori e codici d'uscita dei terminali, avvio.                                     |
-| [stores/activityStore.ts](src/renderer/stores/activityStore.ts)           | Timeline per terminale, caricata quando si apre il pannello e aggiornata dagli eventi.                         |
-| [stores/uiStore.ts](src/renderer/stores/uiStore.ts)                       | Stato solo visivo: strumento attivo, panel in modalità focus, pannello Attività aperto.                        |
+| File | Contesto |
+|---|---|
+| [panels/PanelNode.tsx](src/renderer/panels/PanelNode.tsx) | **Cornice comune** di ogni panel: header trascinabile (icona, titolo, tipo, stato, tool corrente, Attività, focus, menu, chiudi), ridimensionamento, menu (focus, rinomina, duplica, converti in Claude, ferma, elimina). `PanelContent` sceglie il corpo per tipo. |
+| [panels/StatusBadge.tsx](src/renderer/panels/StatusBadge.tsx) · [panelMeta.ts](src/renderer/panels/panelMeta.ts) | Badge di stato con colori del design; etichette; conferma di eliminazione per processi in esecuzione. |
+| [panels/PanelIcon.tsx](src/renderer/panels/PanelIcon.tsx) · [panelIcons.ts](src/renderer/panels/panelIcons.ts) | Icone Phosphor per tipo di panel. |
+| [panels/PanelPlaceholder.tsx](src/renderer/panels/PanelPlaceholder.tsx) | Corpo provvisorio di Architettura e Codice (sostituito da M6, M7). |
+| [panels/markdown/MarkdownBody.tsx](src/renderer/panels/markdown/MarkdownBody.tsx) | Corpo del panel Markdown: interruttore Anteprima / Modifica, percorso, stato del salvataggio, avvisi (conflitto, file mancante con "Crea il file", errore). |
+| [panels/markdown/MarkdownEditor.tsx](src/renderer/panels/markdown/MarkdownEditor.tsx) | Monaco in modalità markdown, caricato a richiesta (lazy), Cmd/Ctrl+S per salvare subito. |
+| [panels/markdown/MarkdownPreview.tsx](src/renderer/panels/markdown/MarkdownPreview.tsx) | react-markdown + GFM (tabelle, checklist); i link http(s) si aprono nel browser di sistema. Stili `.md-preview` in [index.css](src/renderer/index.css). |
+| [editor/monaco.ts](src/renderer/editor/monaco.ts) | Monaco incluso nell'app (niente CDN): worker via Vite, tema `plancia-dark`, opzioni comuni degli editor (riusate dal panel Codice in M7). |
+| [panels/terminal/terminalRegistry.ts](src/renderer/panels/terminal/terminalRegistry.ts) | Istanze xterm fuori da React: replay con offset, fit e resize, link esterni, politica WebGL, ultime righe per l'anteprima. |
+| [panels/terminal/TerminalBody.tsx](src/renderer/panels/terminal/TerminalBody.tsx) | Corpo del terminale: schermata di avvio / ripresa, errore (Claude non trovato), xterm, barra "processo terminato". |
+| [panels/terminal/TerminalPreview.tsx](src/renderer/panels/terminal/TerminalPreview.tsx) · [xtermTheme.ts](src/renderer/panels/terminal/xtermTheme.ts) | Anteprima a zoom basso; tema e font del terminale (con fallback Nerd Font). |
 
-### 7.10 Test — `tests/`
+### 8.10 Renderer — ispettori e store
 
-| Area                  | File                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| Lavagna e salvataggio | `BoardStore`, `workspace`, `debounce`                                                            |
-| Terminali             | `PtyService`, `TerminalService` (con [fakePty.ts](tests/fakePty.ts)), `shellEnv`                 |
-| Sicurezza percorsi    | `resolveInWorkspace`                                                                             |
-| Claude / server       | `hooks`, `LocalServer` (anche MCP reale via SDK e ponte `.cjs`), `ClaudeLauncher`, `ActivityLog` |
-| Contratto             | `ipc`, `ping`                                                                                    |
+| File | Contesto |
+|---|---|
+| [inspectors/ActivityPanel.tsx](src/renderer/inspectors/ActivityPanel.tsx) | Pannello laterale "Attività": timeline cronologica con icone per tipo e stato dei tool. |
+| [stores/workspaceStore.ts](src/renderer/stores/workspaceStore.ts) | Specchio dello snapshot del main + nodi React Flow (selezione e trascinamento solo locali). Manda gli intenti. |
+| [stores/terminalStore.ts](src/renderer/stores/terminalStore.ts) | Info app (versione Claude), errori e codici d'uscita dei terminali, avvio. |
+| [stores/activityStore.ts](src/renderer/stores/activityStore.ts) | Timeline per terminale, caricata quando si apre il pannello e aggiornata dagli eventi. |
+| [stores/markdownStore.ts](src/renderer/stores/markdownStore.ts) | Per ogni panel Markdown: ultimo contenuto salvato e versione, bozza locale, stato del salvataggio, autosalvataggio dopo 500 ms, conflitti con le modifiche esterne. La bozza vive fuori dal componente: sopravvive al passaggio tra lavagna e modalità focus. |
+| [stores/uiStore.ts](src/renderer/stores/uiStore.ts) | Stato solo visivo: strumento attivo, panel in modalità focus, pannello Attività aperto, menu Markdown aperto. |
+
+### 8.11 Test — `tests/`
+
+| Area | File |
+|---|---|
+| Lavagna e salvataggio | `BoardStore`, `workspace`, `debounce` |
+| Terminali | `PtyService`, `TerminalService` (con [fakePty.ts](tests/fakePty.ts)), `shellEnv` |
+| Sicurezza percorsi | `resolveInWorkspace` |
+| Markdown | `MarkdownService` (versioni, conflitti, eco, file mancanti, percorsi fuori progetto), `FileWatcher` (chokidar reale) |
+| Claude / server | `hooks`, `LocalServer` (anche MCP reale via SDK e ponte `.cjs`), `ClaudeLauncher`, `ActivityLog` |
+| Contratto | `ipc`, `ping` |
 
 ---
 
-## 8. Roadmap e dove andrà il codice
+## 9. Roadmap e dove andrà il codice
 
 ```mermaid
 flowchart LR
   M0["M0 Scaffold ✅"] --> M1["M1 Lavagna ✅"] --> M2["M2 Terminali ✅"] --> M3["M3 Server e hook ✅"]
-  M3 --> M4["M4 Markdown ⏳"] --> M5["M5 Connessioni ⏳"] --> M6["M6 Architettura ⏳"] --> M7["M7 Codice ⏳"]
+  M3 --> M4["M4 Markdown ✅"] --> M5["M5 Connessioni ⏳"] --> M6["M6 Architettura ⏳"] --> M7["M7 Codice ⏳"]
 ```
 
-| Milestone           | Nuovi pezzi previsti (spec §11)                                                                                                                                                                                                                            |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **M4 Markdown**     | `main/files/FileWatcher.ts` (chokidar), servizio file dei panel con versioni, `renderer/panels/markdown/` (Monaco + anteprima react-markdown)                                                                                                              |
-| **M5 Connessioni**  | `shared/access.ts` + `main/access/AccessService.ts` (permessi dalle frecce), `main/claude/manifest.ts`, tool MCP `read_panel`/`write_panel`, protezione in `PreToolUse`, edge custom in `canvas/`, ispettore freccia e "Cosa vede Claude" in `inspectors/` |
-| **M6 Architettura** | schema `ArchitectureDoc`, `.plancia/panels/<id>.arch.json`, `renderer/panels/architecture/` (anteprima SVG + editor in focus), layout dagre, `get_panel_schema`                                                                                            |
-| **M7 Codice**       | `main/git/GitService.ts`, `renderer/panels/code/` (Monaco sola lettura + diff), feed dei file dal `PostToolUse`                                                                                                                                            |
+| Milestone | Nuovi pezzi previsti (spec §11) |
+|---|---|
+| **M5 Connessioni** | `shared/access.ts` + `main/access/AccessService.ts` (permessi dalle frecce), `main/claude/manifest.ts`, tool MCP `read_panel`/`write_panel`, protezione in `PreToolUse`, edge custom in `canvas/`, ispettore freccia e "Cosa vede Claude" in `inspectors/` |
+| **M6 Architettura** | schema `ArchitectureDoc`, `.plancia/panels/<id>.arch.json`, `renderer/panels/architecture/` (anteprima SVG + editor in focus), layout dagre, `get_panel_schema` |
+| **M7 Codice** | `main/git/GitService.ts`, `renderer/panels/code/` (Monaco sola lettura + diff), feed dei file dal `PostToolUse` |
 
 ---
 
-## 9. Registro degli aggiornamenti
+## 10. Registro degli aggiornamenti
 
-| Milestone | Cosa è cambiato in questo documento                                                                                                          |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| M3        | Prima versione: processi, flussi intenti/snapshot, terminali, integrazione Claude (hook, MCP, stati), dati su disco, mappa completa dei file |
+| Milestone | Cosa è cambiato in questo documento |
+|---|---|
+| M4 | Panel Markdown: MarkdownService e FileWatcher nella visione d'insieme, diagramma salvataggio / modifiche esterne / conflitti, nuovi file in mappa (main, renderer, test), nota su Monaco `EditContext` e `nokey` |
+| M3 | Prima versione: processi, flussi intenti/snapshot, terminali, integrazione Claude (hook, MCP, stati), dati su disco, mappa completa dei file |

@@ -90,6 +90,13 @@ export const persistedBoardSchema = z.object({
   viewport: viewportSchema.optional(),
 });
 
+/** A path as stored on a panel: relative to the workspace, checked again on every access. */
+export const workspacePathSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine((p) => !p.includes('\0'), 'Percorso non valido');
+
 // Intents: the only way the renderer can ask the main process to change the board.
 export const boardIntentSchema = z.discriminatedUnion('type', [
   z.object({
@@ -97,6 +104,8 @@ export const boardIntentSchema = z.discriminatedUnion('type', [
     panelType: panelTypeSchema,
     position: positionSchema,
     mode: terminalModeSchema.optional(),
+    /** Required for markdown panels. */
+    filePath: workspacePathSchema.optional(),
   }),
   z.object({
     type: z.literal('movePanels'),
@@ -135,6 +144,21 @@ export const terminalResizeSchema = z.object({
   rows: dimension,
 });
 export const terminalIdPayloadSchema = z.object({ id: terminalIdSchema });
+/** Same shape for any panel id. */
+export const panelIdPayloadSchema = terminalIdPayloadSchema;
+
+/** Markdown files above this size are not loaded into a panel. */
+export const MARKDOWN_MAX_CHARS = 2_000_000;
+
+export const markdownCreateSchema = z.object({
+  mode: z.enum(['new', 'open']),
+  position: positionSchema,
+});
+export const markdownWriteSchema = z.object({
+  id: terminalIdSchema,
+  content: z.string().max(MARKDOWN_MAX_CHARS),
+  baseVersion: z.number().int().nonnegative(),
+});
 export const externalUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const appSettingsSchema = z.object({

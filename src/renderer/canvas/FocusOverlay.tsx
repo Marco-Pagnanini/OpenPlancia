@@ -69,7 +69,7 @@ export function FocusOverlay() {
             </kbd>
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-hidden rounded-b-[11px]">
+        <div className="nokey min-h-0 flex-1 overflow-hidden rounded-b-[11px]">
           <PanelContent panel={panel} variant="focus" />
         </div>
       </div>
