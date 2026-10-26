@@ -1,3 +1,4 @@
+import type { ActivityEvent } from './activity';
 import type { BoardIntent, WorkspaceSnapshot } from './types';
 
 /**
@@ -23,6 +24,9 @@ export const IpcChannels = {
   terminalData: 'plancia:terminal:data',
   terminalExit: 'plancia:terminal:exit',
   terminalError: 'plancia:terminal:error',
+  activityList: 'plancia:activity:list',
+  /** main → renderer: an activity entry was added or updated. */
+  activityEvent: 'plancia:activity:event',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -105,5 +109,9 @@ export interface PlanciaApi {
     onData(listener: (event: TerminalDataEvent) => void): () => void;
     onExit(listener: (event: TerminalExitEvent) => void): () => void;
     onError(listener: (event: TerminalErrorEvent) => void): () => void;
+  };
+  activity: {
+    list(terminalId: string): Promise<ActivityEvent[]>;
+    onEvent(listener: (event: ActivityEvent) => void): () => void;
   };
 }

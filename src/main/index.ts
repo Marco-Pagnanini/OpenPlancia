@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { IpcChannels, type AppInfo, type OpenWorkspaceResult } from '@shared/ipc';
 import {
   externalUrlSchema,
@@ -9,11 +11,21 @@ import {
   terminalWriteSchema,
 } from '@shared/schemas';
 import type { WorkspaceSnapshot } from '@shared/types';
-import { CLAUDE_INSTALL_URL, claudeVersion, findClaude } from './claude/ClaudeLauncher';
+import { ActivityLog } from './activity/ActivityLog';
+import {
+  CLAUDE_INSTALL_URL,
+  claudeVersion,
+  findClaude,
+  sessionStartCommand,
+  writeRunFiles,
+} from './claude/ClaudeLauncher';
 import { buildPtyEnv, loginShellEnv } from './env/shellEnv';
 import { handlePing } from './ipc/ping';
 import { nodePtySpawn } from './pty/nodePtySpawn';
 import { PtyService } from './pty/PtyService';
+import { handleHook } from './server/hooks';
+import { LocalServer } from './server/LocalServer';
+import { createPlanciaMcpServer, PLANCIA_MCP_TOOLS } from './server/mcp';
 import { TerminalService } from './terminal/TerminalService';
 import { WorkspaceService } from './workspace/WorkspaceService';
 
@@ -23,9 +35,12 @@ const isDev = !app.isPackaged && process.env['ELECTRON_RENDERER_URL'] !== undefi
 const devUserData = process.env['PLANCIA_USER_DATA'];
 if (!app.isPackaged && devUserData) app.setPath('userData', devUserData);
 
-const iconPath = app.isPackaged
-  ? join(process.resourcesPath, 'resources', 'icon.png')
-  : join(import.meta.dirname, '../../resources/icon.png');
+const resourcesDir = app.isPackaged
+  ? join(process.resourcesPath, 'resources')
+  : join(import.meta.dirname, '../../resources');
+const iconPath = join(resourcesDir, 'icon.png');
+/** Per-terminal config files with tokens live here, never in the project (spec §4). */
+const runRoot = join(app.getPath('userData'), 'run');
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -47,6 +62,75 @@ const workspace = new WorkspaceService({
 
 const ptyEnv = () => loginShellEnv().then((env) => buildPtyEnv(env, app.getVersion()));
 
+const activity = new ActivityLog({
+  dir: () => {
+    const root = workspace.root();
+    if (!root) return null;
+    const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
+    return join(app.getPath('userData'), 'activity', key);
+  },
+  onEvent: (event) => send(IpcChannels.activityEvent, event),
+});
+
+function notifyAttention(terminalId: string, message: string): void {
+  if (!Notification.isSupported() || mainWindow?.isFocused()) return;
+  const panel = workspace.getPanel(terminalId);
+  const notification = new Notification({
+    title: `${panel?.title ?? 'Claude'} richiede attenzione`,
+    body: message,
+  });
+  notification.on('click', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+  notification.show();
+}
+
+const server = new LocalServer({
+  onHook: (terminalId, body) =>
+    handleHook(terminalId, body, {
+      terminal: (id) => {
+        const panel = workspace.getPanel(id);
+        return panel?.type === 'terminal' ? panel : undefined;
+      },
+      root: () => workspace.root(),
+      setRuntime: (id, patch) => workspace.setTerminalRuntime(id, patch),
+      setSessionId: (id, sessionId) => workspace.setClaudeSessionId(id, sessionId),
+      appendActivity: (id, entry) => activity.append(id, entry),
+      updateTool: (id, useId, patch) => activity.updateTool(id, useId, patch),
+      settleTools: (id) => activity.settleRunning(id),
+      needsAttention: notifyAttention,
+    }),
+  createMcpServer: (terminalId) =>
+    createPlanciaMcpServer(terminalId, {
+      // Connections arrive in M5: nothing is linked yet.
+      listPanels: () => [],
+      onToolCall: (id, tool) =>
+        activity.append(id, {
+          kind: 'tool',
+          title: `Plancia: ${tool}`,
+          detail: 'Nessun panel collegato',
+        }),
+    }),
+});
+
+function prepareClaude(terminalId: string) {
+  server.issueToken(terminalId);
+  const hookUrl = server.url('hooks', terminalId);
+  return writeRunFiles({
+    runRoot,
+    terminalId,
+    hookUrl,
+    mcpUrl: server.url('mcp', terminalId),
+    startCommand: sessionStartCommand(
+      process.execPath,
+      join(resourcesDir, 'plancia-hook.cjs'),
+      hookUrl,
+    ),
+    mcpTools: PLANCIA_MCP_TOOLS,
+  });
+}
+
 const pty = new PtyService({
   spawn: nodePtySpawn,
   onData: (id, data, start) => send(IpcChannels.terminalData, { id, data, start }),
@@ -62,7 +146,17 @@ const terminals: TerminalService = new TerminalService({
   env: ptyEnv,
   findClaude,
   onError: (id, code, message) => send(IpcChannels.terminalError, { id, code, message }),
+  prepareClaude,
 });
+
+workspace.onChange((change) => {
+  if (change.type !== 'deletePanels') return;
+  for (const id of change.ids) {
+    server.revoke(id);
+    void activity.remove(id);
+  }
+});
+workspace.onBeforeClose(() => activity.reset());
 
 // Detected once at startup (spec §7.1); shown in the UI.
 const appInfo: Promise<AppInfo> = ptyEnv().then(async (env) => {
@@ -183,6 +277,10 @@ function registerIpc(): void {
     const parsed = terminalWriteSchema.safeParse(payload);
     if (parsed.success) pty.write(parsed.data.id, parsed.data.data);
   });
+  ipcMain.handle(IpcChannels.activityList, (_event, payload: unknown) => {
+    const parsed = terminalIdPayloadSchema.safeParse(payload);
+    return parsed.success ? activity.list(parsed.data.id) : [];
+  });
   ipcMain.on(IpcChannels.terminalResize, (_event, payload: unknown) => {
     const parsed = terminalResizeSchema.safeParse(payload);
     if (parsed.success) pty.resize(parsed.data.id, parsed.data.cols, parsed.data.rows);
@@ -192,6 +290,10 @@ function registerIpc(): void {
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(iconPath);
   registerIpc();
+  // Run files from a previous launch hold tokens that no longer work: drop them.
+  await rm(runRoot, { recursive: true, force: true });
+  const port = await server.start();
+  console.log(`[server] in ascolto su 127.0.0.1:${port}`);
   await workspace.restoreLast();
   createWindow();
 
@@ -214,7 +316,13 @@ app.on('before-quit', (event) => {
   void terminals
     .shutdown()
     .catch((err: unknown) => console.error('[pty] chiusura dei terminali fallita', err))
-    .finally(() => void workspace.close({ notify: false }).finally(() => app.quit()));
+    .finally(
+      () =>
+        void workspace
+          .close({ notify: false })
+          .then(() => server.stop())
+          .finally(() => app.quit()),
+    );
 });
 
 app.on('window-all-closed', () => {

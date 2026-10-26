@@ -6,6 +6,7 @@ import {
   type TerminalErrorEvent,
   type TerminalExitEvent,
 } from '@shared/ipc';
+import type { ActivityEvent } from '@shared/activity';
 import type { WorkspaceSnapshot } from '@shared/types';
 
 function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
@@ -39,6 +40,10 @@ const api: PlanciaApi = {
     onData: (listener) => subscribe<TerminalDataEvent>(IpcChannels.terminalData, listener),
     onExit: (listener) => subscribe<TerminalExitEvent>(IpcChannels.terminalExit, listener),
     onError: (listener) => subscribe<TerminalErrorEvent>(IpcChannels.terminalError, listener),
+  },
+  activity: {
+    list: (terminalId) => ipcRenderer.invoke(IpcChannels.activityList, { id: terminalId }),
+    onEvent: (listener) => subscribe<ActivityEvent>(IpcChannels.activityEvent, listener),
   },
 };
 

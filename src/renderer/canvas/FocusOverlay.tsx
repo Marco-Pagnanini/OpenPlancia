@@ -2,7 +2,7 @@ import { CornersInIcon } from '@phosphor-icons/react';
 import { useEffect } from 'react';
 import { PanelIcon } from '../panels/PanelIcon';
 import { panelKindLabel } from '../panels/panelMeta';
-import { PanelContent } from '../panels/PanelNode';
+import { ClaudeHeaderExtras, PanelContent } from '../panels/PanelNode';
 import { StatusBadge } from '../panels/StatusBadge';
 import { terminalRegistry } from '../panels/terminal/terminalRegistry';
 import { useUiStore } from '../stores/uiStore';
@@ -54,7 +54,8 @@ export function FocusOverlay() {
             {panel.title}
           </span>
           <span className="shrink-0 text-[11px] text-ink-4">{panelKindLabel(panel)}</span>
-          <div className="flex-1" />
+          <div className="min-w-2 flex-1" />
+          <ClaudeHeaderExtras panel={panel} />
           <StatusBadge panel={panel} />
           <button
             type="button"

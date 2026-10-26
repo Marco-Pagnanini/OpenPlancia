@@ -1,4 +1,4 @@
-import { CornersOutIcon, DotsThreeIcon, XIcon } from '@phosphor-icons/react';
+import { CornersOutIcon, DotsThreeIcon, ListBulletsIcon, XIcon } from '@phosphor-icons/react';
 import { memo, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import { NodeResizer, useStore, type NodeProps } from '@xyflow/react';
 import { MIN_PANEL_SIZE } from '@shared/panels';
@@ -150,6 +150,35 @@ export function PanelContent({ panel, variant }: { panel: Panel; variant: 'panel
   return <PanelPlaceholder panel={panel} />;
 }
 
+/** Current tool and the "Attività" button, for Claude terminals. */
+export function ClaudeHeaderExtras({ panel }: { panel: Panel }) {
+  const setActivity = useUiStore((s) => s.setActivity);
+  const open = useUiStore((s) => s.activityId === panel.id);
+  if (panel.type !== 'terminal' || panel.mode !== 'claude') return null;
+  return (
+    <>
+      {panel.currentTool && panel.status === 'working' && (
+        <span
+          className="min-w-0 shrink truncate font-mono text-[11px] text-ink-3"
+          title={panel.currentTool}
+        >
+          {panel.currentTool}
+        </span>
+      )}
+      <button
+        type="button"
+        aria-label="Attività"
+        aria-pressed={open}
+        title="Attività"
+        onClick={() => setActivity(open ? null : panel.id)}
+        className={`${ICON_BUTTON} ${open ? 'bg-accent/16 text-accent' : ''}`}
+      >
+        <ListBulletsIcon size={14} />
+      </button>
+    </>
+  );
+}
+
 function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
   const { panel } = data;
   const dispatch = useWorkspaceStore((s) => s.dispatch);
@@ -215,9 +244,10 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
               {panel.title}
             </span>
             <span className="shrink-0 text-[11px] text-ink-4">{panelKindLabel(panel)}</span>
-            <div className="flex-1" />
+            <div className="min-w-2 flex-1" />
           </>
         )}
+        <ClaudeHeaderExtras panel={panel} />
         <StatusBadge panel={panel} />
         <button
           type="button"

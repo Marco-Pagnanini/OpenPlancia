@@ -30,7 +30,14 @@ export type PersistedPanel = z.infer<typeof persistedPanelSchema>;
 export type PersistedBoard = z.infer<typeof persistedBoardSchema>;
 
 /** Terminal panel as held in memory: persisted fields plus runtime-only status. */
-export type TerminalPanel = PersistedTerminalPanel & { status: AgentStatus };
+export type TerminalPanel = PersistedTerminalPanel & {
+  status: AgentStatus;
+  /** Label of the tool Claude is running right now (from PreToolUse), if any. */
+  currentTool?: string | undefined;
+};
+
+/** Runtime-only terminal fields, set by the main process. */
+export type TerminalRuntime = Pick<TerminalPanel, 'status' | 'currentTool'>;
 export type MarkdownPanel = z.infer<typeof markdownPanelSchema>;
 export type ArchitecturePanel = z.infer<typeof architecturePanelSchema>;
 export type CodePanel = z.infer<typeof codePanelSchema>;

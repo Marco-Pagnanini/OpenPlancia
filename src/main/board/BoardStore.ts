@@ -13,6 +13,7 @@ import type {
   Size,
   TerminalMode,
   TerminalPanel,
+  TerminalRuntime,
 } from '@shared/types';
 
 export class BoardError extends Error {}
@@ -26,8 +27,7 @@ export interface BoardStoreOptions {
 /** Changes made by the main process itself, not requested by the renderer. */
 export type InternalChange =
   /** Runtime-only terminal state: broadcast but never persisted. */
-  | { type: 'terminalStatus'; id: string; status: AgentStatus }
-  | { type: 'claudeSession'; id: string };
+  { type: 'terminalRuntime'; id: string } | { type: 'claudeSession'; id: string };
 
 export type BoardChange = BoardIntent | InternalChange;
 
@@ -61,7 +61,7 @@ export function toPersisted(board: Board): PersistedBoard {
     panels: board.panels.map((p): PersistedPanel => {
       if (p.type !== 'terminal') return p;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { status, ...rest } = p;
+      const { status, currentTool, ...rest } = p;
       return rest;
     }),
   };
@@ -104,13 +104,16 @@ export class BoardStore {
   }
 
   setTerminalStatus(id: string, status: AgentStatus): void {
+    this.setTerminalRuntime(id, { status });
+  }
+
+  /** `currentTool: undefined` clears the current tool. */
+  setTerminalRuntime(id: string, patch: Partial<TerminalRuntime>): void {
     const panel = this.requireTerminal(this.board, id);
-    if (panel.status === status) return;
-    this.commit(this.replacePanel(this.board, { ...panel, status }), {
-      type: 'terminalStatus',
-      id,
-      status,
-    });
+    const next: TerminalPanel = { ...panel, ...patch };
+    if (next.currentTool === undefined) delete next.currentTool;
+    if (next.status === panel.status && next.currentTool === panel.currentTool) return;
+    this.commit(this.replacePanel(this.board, next), { type: 'terminalRuntime', id });
   }
 
   setClaudeSessionId(id: string, sessionId: string): void {

@@ -140,3 +140,24 @@ export const externalUrlSchema = z.url({ protocol: /^https?$/ });
 export const appSettingsSchema = z.object({
   lastWorkspace: z.string().optional(),
 });
+
+/**
+ * Body of a Claude Code hook request. Only the fields Plancia reads are listed; everything else
+ * passes through. See https://code.claude.com/docs/en/hooks.
+ */
+export const hookPayloadSchema = z.looseObject({
+  hook_event_name: z.string(),
+  session_id: z.string().optional(),
+  cwd: z.string().optional(),
+  source: z.string().optional(),
+  prompt: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_input: z.record(z.string(), z.unknown()).optional(),
+  tool_use_id: z.string().optional(),
+  error: z.string().optional(),
+  message: z.string().optional(),
+  title: z.string().optional(),
+  notification_type: z.string().optional(),
+  last_assistant_message: z.string().optional(),
+  reason: z.string().optional(),
+});

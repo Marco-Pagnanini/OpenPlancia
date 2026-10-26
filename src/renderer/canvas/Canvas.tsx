@@ -7,6 +7,7 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react';
 import { useCallback, useState } from 'react';
+import { ActivityPanel } from '../inspectors/ActivityPanel';
 import { PanelNodeComponent } from '../panels/PanelNode';
 import { confirmDelete } from '../panels/panelMeta';
 import { useUiStore } from '../stores/uiStore';
@@ -105,6 +106,7 @@ export function Canvas() {
       <ToolRail />
       <ZoomControls />
       <Hint />
+      <ActivityPanel />
       <FocusOverlay />
     </div>
   );

@@ -521,7 +521,7 @@ plancia/
 | M0 Scaffold | fatto | electron-vite 6, Electron 45, React 19, TS 6.0 strict, Tailwind 4, ESLint 10, vitest 5. `window.plancia.ping()` verificato. |
 | M1 Canvas e workspace | fatto | React Flow 12 + zustand. Intenti validati con zod nel main (`BoardStore`), snapshot completo al renderer. Salvataggio con debounce 500 ms e flush su `before-quit`. Verificato: 3 panel, chiusura e riapertura con lo stesso layout. |
 | M2 Terminale | fatto | node-pty 1.1 (N-API, nessun rebuild per Electron) + xterm 6 (fit, webgl, web-links). Verificati: colori 16/256/truecolor, vim, top (htop non installato), Ctrl+C, Claude Code con `--session-id`/`--name` e ripresa con `--resume`, modalità focus, anteprima sotto il 60%, nessun processo orfano dopo Cmd+Q. |
-| M3 Server locale e hook | da fare | |
+| M3 Server locale e hook | fatto | Server su 127.0.0.1 (porta casuale, token di 32 byte nel path, controllo di Host e Origin). Hook http + bridge `command` per SessionStart, MCP `plancia` stateless con `list_panels`. Verificati con Claude Code 2.1.310: badge `al lavoro` con il tool corrente → `in attesa`, `richiede input` sul permesso di Write, timeline in Attività, `list_panels` chiamato senza prompt. |
 | M4 Markdown | da fare | |
 | M5 Connessioni | da fare | |
 | M6 Architettura | da fare | |
@@ -531,10 +531,10 @@ plancia/
 
 ## 14. Decisioni e questioni aperte
 
-- [ ] Gli hook passati con `--settings` si sommano a quelli dell'utente? (verificare in M3)
-- [ ] Hook `type: "http"` supportati dalla versione installata? Altrimenti fallback `resources/plancia-hook.js`.
-- [ ] Posizione esatta di `file_path` nell'input del `PostToolUse` per `Write`/`Edit`/`MultiEdit` (atteso: `tool_input.file_path`).
-- [ ] Versione minima di Claude Code da richiedere (decidere dopo M3).
+- [x] Gli hook passati con `--settings` si sommano a quelli dell'utente: **sì**. Verificato (M3) con `claude -p --include-hook-events`: su SessionStart sono partiti 7 hook (utente + plugin + Plancia), su Stop 10.
+- [x] Hook `type: "http"`: supportati (verificato su 2.1.296 e 2.1.310) per tutti gli eventi usati **tranne SessionStart**, che accetta solo `command`/`mcp_tool` (documentazione hooks). Per SessionStart si usa il bridge `resources/plancia-hook.cjs` (`.cjs` e non `.js`: il `package.json` del progetto è `"type": "module"`), eseguito con il binario di Plancia in modalità Node (`ELECTRON_RUN_AS_NODE=1`). Il bridge esce sempre con 0. Su Windows il comando non è verificato.
+- [x] `file_path` è in `tool_input.file_path` per Write/Edit/MultiEdit, `notebook_path` per NotebookEdit (documentazione e payload reali). Altri campi verificati: `notification_type` (`permission_prompt`, `idle_prompt`, …), `last_assistant_message` in Stop, `reason` in SessionEnd, `tool_use_id` in Pre/PostToolUse.
+- [x] Versione minima di Claude Code: 2.1.296 (vedi nota M3 sotto).
 - [ ] Prima di distribuire: verificare termini d'uso e regole di branding di Anthropic per un'app che avvia la CLI dell'utente.
 - [ ] Dopo l'MVP: multi-agente (frecce Terminale ↔ Terminale), valutando prima i canali nativi di Claude Code per la comunicazione tra sessioni; panel Design.
 - [x] **Node 22.12+ richiesto** (`.nvmrc` = 22.14.0): vitest 5 non supporta Node 20. (M0)
@@ -556,3 +556,10 @@ plancia/
 - [x] **Conferma di eliminazione**: chiesta per *ogni* terminale con un processo in esecuzione, non solo quando Claude lavora, perché Backspace su un panel selezionato lo elimina.
 - [x] **Limite noto**: con lo zoom della lavagna diverso dal 100%, la selezione col mouse in xterm può non coincidere col testo (xterm non conosce la scala CSS). Per lavorare di precisione c'è la modalità focus al 100%.
 - [x] **Font del terminale**: Geist Mono, con fallback ai Nerd Font installati (MesloLGS NF, Symbols Nerd Font…) per le icone dei prompt.
+- [x] **Eventi hook in più rispetto alla spec** (M3): `PostToolUseFailure` (tool fallito), `PermissionDenied` (negato dalla modalità auto) e `StopFailure` (errore API, così lo stato torna `in attesa`). A fine turno i tool rimasti "in corso" senza `PostToolUse` diventano "annullati": succede quando un hook di un altro plugin (es. un gate) blocca la chiamata.
+- [x] **SessionEnd** imposta `terminato` solo se la sessione finisce davvero: con `reason` `clear` o `resume` il processo continua con un'altra sessione. Su SessionStart con un `session_id` diverso (dopo `/clear` o `/resume` interno) l'id salvato si aggiorna, così "Riprendi sessione" riprende quella giusta.
+- [x] **needs-input** solo per `notification_type` `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input`; `idle_prompt` è informativo. Notifica di sistema solo se la finestra non ha il focus.
+- [x] **ActivityLog su disco**: `userData/activity/<hash del percorso del workspace>/<terminalId>.jsonl`, ultimi 500 eventi per terminale, scritture serializzate (un aggiornamento non arriva mai prima dell'evento che aggiorna). Il file viene cancellato con il panel.
+- [x] **File di runtime**: `userData/run/<terminalId>/{mcp,settings}.json` (0600, cartella 0700) e `run/plancia-system.md`. Token nuovo a ogni avvio di Claude; la cartella `run` viene svuotata all'avvio dell'app.
+- [x] **Server MCP stateless**: un `McpServer` + trasporto Streamable HTTP per richiesta (`enableJsonResponse`), GET/DELETE → 405. Il server locale rifiuta Host diversi da `127.0.0.1:<porta>`/`localhost:<porta>` e qualsiasi richiesta con header `Origin` (protezione da DNS rebinding e da pagine web).
+- [x] **Versione minima di Claude Code**: gli hook http e i campi usati funzionano dalla 2.1.296; `onFailure` richiede 2.1.295. Proposta: minimo 2.1.296.

@@ -186,7 +186,7 @@ describe('terminal runtime state', () => {
     store.setTerminalStatus(id, 'idle');
     store.setTerminalStatus(id, 'idle');
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0]![1]).toEqual({ type: 'terminalStatus', id, status: 'idle' });
+    expect(listener.mock.calls[0]![1]).toEqual({ type: 'terminalRuntime', id });
   });
 
   it('switches a shell to claude dropping any previous session', () => {

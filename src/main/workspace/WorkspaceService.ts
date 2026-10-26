@@ -3,7 +3,7 @@ import { basename } from 'node:path';
 import { z } from 'zod';
 import type { DispatchResult } from '@shared/ipc';
 import { boardIntentSchema } from '@shared/schemas';
-import type { AgentStatus, Panel, WorkspaceSnapshot } from '@shared/types';
+import type { AgentStatus, Panel, TerminalRuntime, WorkspaceSnapshot } from '@shared/types';
 import { BoardStore, fromPersisted, toPersisted, type BoardChange } from '../board/BoardStore';
 import { loadSettings, saveSettings } from '../settings/AppSettings';
 import { createDebouncedTask, type DebouncedTask } from '../util/debounce';
@@ -54,7 +54,11 @@ export class WorkspaceService {
   }
 
   setTerminalStatus(id: string, status: AgentStatus): void {
-    if (this.getPanel(id)) this.current?.store.setTerminalStatus(id, status);
+    this.setTerminalRuntime(id, { status });
+  }
+
+  setTerminalRuntime(id: string, patch: Partial<TerminalRuntime>): void {
+    if (this.getPanel(id)?.type === 'terminal') this.current?.store.setTerminalRuntime(id, patch);
   }
 
   setClaudeSessionId(id: string, sessionId: string): void {
@@ -85,7 +89,7 @@ export class WorkspaceService {
       (err) => console.error('[workspace] salvataggio di board.json fallito', err),
     );
     const unsubscribe = store.subscribe((board, change) => {
-      if (change.type !== 'terminalStatus') saver.schedule();
+      if (change.type !== 'terminalRuntime') saver.schedule();
       // The renderer already shows its own viewport; echoing it back is wasted work.
       if (change.type !== 'setViewport') this.emit();
       for (const listener of this.changeListeners) listener(change, board.panels);

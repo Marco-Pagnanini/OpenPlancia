@@ -20,6 +20,11 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    files: ['resources/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
     files: ['tests/**/*.ts'],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },

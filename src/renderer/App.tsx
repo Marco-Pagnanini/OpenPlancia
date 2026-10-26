@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Canvas } from './canvas/Canvas';
 import { EmptyState } from './components/EmptyState';
 import { ErrorToast } from './components/ErrorToast';
+import { useActivityStore } from './stores/activityStore';
 import { useTerminalStore } from './stores/terminalStore';
 import { useWorkspaceStore } from './stores/workspaceStore';
 
@@ -13,6 +14,7 @@ export function App() {
 
   useEffect(() => init(), [init]);
   useEffect(() => useTerminalStore.getState().init(), []);
+  useEffect(() => useActivityStore.getState().init(), []);
 
   if (!loaded) return null;
 

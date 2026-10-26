@@ -6,6 +6,7 @@ import {
   claudeArgs,
   claudeLaunch,
   shellLaunch,
+  type RunFiles,
 } from '../claude/ClaudeLauncher';
 import type { Env } from '../env/shellEnv';
 import { resolveInWorkspace } from '../files/resolveInWorkspace';
@@ -19,6 +20,8 @@ export interface TerminalServiceOptions {
   env: () => Promise<Env>;
   findClaude: (env: Env) => Promise<string | null>;
   onError: (id: string, code: TerminalErrorCode, message: string) => void;
+  /** Writes the per-terminal MCP config and hook settings (fresh token each launch). */
+  prepareClaude?: (id: string) => Promise<RunFiles>;
   newSessionId?: () => string;
 }
 
@@ -123,7 +126,8 @@ export class TerminalService {
       const sessionId = resume ? panel.claudeSessionId : this.newSessionId();
       if (!sessionId) throw new StartError('no-session', 'Nessuna sessione da riprendere');
       if (!resume) workspace.setClaudeSessionId(id, sessionId);
-      launch = claudeLaunch(claudePath, claudeArgs(panel, { id: sessionId, resume }));
+      const files = await this.options.prepareClaude?.(id);
+      launch = claudeLaunch(claudePath, claudeArgs(panel, { id: sessionId, resume }, files));
     }
 
     pty.start(id, { ...launch, cwd, env, cols, rows });
