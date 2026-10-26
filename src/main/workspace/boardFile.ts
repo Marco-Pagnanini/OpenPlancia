@@ -43,7 +43,7 @@ export async function readBoardFile(root: string): Promise<PersistedBoard> {
       : undefined;
   if (typeof version === 'number' && version > BOARD_SCHEMA_VERSION) {
     throw new BoardFileError(
-      `${PLANCIA_DIR}/${BOARD_FILE} usa la versione di schema ${version}, più recente di quella supportata (${BOARD_SCHEMA_VERSION}). Aggiorna Plancia.`,
+      `${PLANCIA_DIR}/${BOARD_FILE} usa la versione di schema ${version}, più recente di quella supportata (${BOARD_SCHEMA_VERSION}). Aggiorna OpenPlancia.`,
     );
   }
 

@@ -1,5 +1,5 @@
-appId: app.plancia
-productName: Plancia
+appId: app.openplancia
+productName: OpenPlancia
 directories:
   output: release
   buildResources: resources

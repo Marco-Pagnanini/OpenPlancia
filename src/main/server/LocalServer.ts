@@ -143,7 +143,7 @@ export class LocalServer {
     try {
       reply = await this.options.onHook(terminalId, body);
     } catch (err) {
-      // A Plancia bug must never block Claude: answer 2xx with no decision.
+      // A OpenPlancia bug must never block Claude: answer 2xx with no decision.
       console.error('[hooks] errore nella gestione dell’evento', err);
     }
     if (reply) {

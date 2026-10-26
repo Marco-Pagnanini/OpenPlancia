@@ -1,9 +1,9 @@
-# Architettura di Plancia
+# Architettura di OpenPlancia
 
-> **Aggiornato a: M5** (connessioni) · prossima: M6 (panel Architettura)
+> **Aggiornato a: M5 + OpenPlancia** (connessioni, schermata iniziale) · prossima: M6 (panel Architettura)
 > Questo documento viene aggiornato alla fine di ogni milestone. Specifica di prodotto: [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
 
-Plancia è un'app desktop **Electron**. Non c'è un backend remoto: il "backend" è il **processo main** (Node.js sul computer dell'utente), il "frontend" è il **renderer** (React in una finestra Chromium isolata). I due parlano solo attraverso un'API tipizzata e stretta esposta dal **preload**.
+OpenPlancia è un'app desktop **Electron**. Non c'è un backend remoto: il "backend" è il **processo main** (Node.js sul computer dell'utente), il "frontend" è il **renderer** (React in una finestra Chromium isolata). I due parlano solo attraverso un'API tipizzata e stretta esposta dal **preload**.
 
 ---
 
@@ -213,7 +213,7 @@ flowchart LR
   D & E & F --> G["claude --session-id &lt;uuid&gt; --name &lt;titolo&gt;<br/>--mcp-config · --settings<br/>--append-system-prompt-file"]
 ```
 
-Gli hook di Plancia **si sommano** a quelli dell'utente (verificato). `SessionStart` accetta solo hook `command`: per quello c'è il ponte [plancia-hook.cjs](resources/plancia-hook.cjs), eseguito con il binario di Plancia in modalità Node.
+Gli hook di OpenPlancia **si sommano** a quelli dell'utente (verificato). `SessionStart` accetta solo hook `command`: per quello c'è il ponte [plancia-hook.cjs](resources/plancia-hook.cjs), eseguito con il binario di OpenPlancia in modalità Node.
 
 ### 5.2 Eventi → stato
 
@@ -375,7 +375,7 @@ flowchart TB
   P -- "file dentro .plancia/" --> D1["deny"]
   P -- "file di un panel senza freccia di scrittura" --> D2["deny (stesso messaggio)"]
   P -- "con freccia di scrittura" --> AL["allow + attesa della modifica → attribuita a Claude"]
-  P -- "altri file" --> NO["nessuna decisione di Plancia"]
+  P -- "altri file" --> NO["nessuna decisione di OpenPlancia"]
 ```
 
 Le modifiche fatte da Claude con `Bash` (es. `echo >> AGENTS.md`) non sono intercettabili in modo affidabile: limite noto (README).
@@ -457,14 +457,14 @@ flowchart TB
 | [terminal/TerminalService.ts](src/main/terminal/TerminalService.ts) | **Collega panel e processi.** Avvia (shell o Claude, nuova sessione o `--resume`), avvia da solo i terminali appena creati, chiude il processo quando il panel viene eliminato, riavvia alla conversione shell → Claude, ferma tutto alla chiusura del workspace. Errori chiari (es. Claude non trovato con link d'installazione). |
 | [pty/PtyService.ts](src/main/pty/PtyService.ts) | Gestione dei pseudo-terminali: output raggruppato ogni 8 ms con offset assoluti, buffer di replay (512K) che sopravvive ai riavvii, `stop` = SIGHUP poi SIGKILL, `disposeAll`. Spawn iniettabile (test con PTY finti). |
 | [pty/nodePtySpawn.ts](src/main/pty/nodePtySpawn.ts) | Adattatore verso `node-pty`. |
-| [env/shellEnv.ts](src/main/env/shellEnv.ts) | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di Plancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH. |
+| [env/shellEnv.ts](src/main/env/shellEnv.ts) | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di OpenPlancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH. |
 | [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows. |
 
 ### 9.5 Main — server locale, hook, MCP, attività (M3)
 
 | File | Contesto |
 |---|---|
-| [server/LocalServer.ts](src/main/server/LocalServer.ts) | Server HTTP su `127.0.0.1` (porta casuale). Rotte `/hooks/:id/:token` e `/mcp/:id/:token`. Token per terminale (32 byte, confronto a tempo costante, rotazione), rifiuta Host estranei e richieste con `Origin`, corpo max 1 MB. Agli hook risponde sempre 2xx: un errore di Plancia non blocca mai Claude. |
+| [server/LocalServer.ts](src/main/server/LocalServer.ts) | Server HTTP su `127.0.0.1` (porta casuale). Rotte `/hooks/:id/:token` e `/mcp/:id/:token`. Token per terminale (32 byte, confronto a tempo costante, rotazione), rifiuta Host estranei e richieste con `Origin`, corpo max 1 MB. Agli hook risponde sempre 2xx: un errore di OpenPlancia non blocca mai Claude. |
 | [server/hooks.ts](src/main/server/hooks.ts) | **Funzione pura `handleHook`**: da evento Claude a stato del terminale, tool corrente, voci della timeline, notifica "richiede attenzione", aggiornamento dell'id di sessione dopo `/clear`. Gestisce UserPromptSubmit, Pre/PostToolUse(Failure), PermissionDenied, Notification, Stop, StopFailure, SessionStart, SessionEnd. |
 | [server/toolLabel.ts](src/main/server/toolLabel.ts) | Etichette leggibili dei tool (`Bash: npm test`, `Edit: src/auth.ts`, `plancia › list_panels`) e percorsi relativi al progetto. |
 | [server/mcp.ts](src/main/server/mcp.ts) | Server MCP `plancia` (uno per richiesta, stateless). Oggi: `list_panels` (lista vuota fino alla M5). Elenco dei tool pre-approvati. |
@@ -476,7 +476,7 @@ flowchart TB
 | File | Contesto |
 |---|---|
 | [files/MarkdownService.ts](src/main/files/MarkdownService.ts) | **Legge e scrive i file dei panel Markdown**: percorso sempre via `resolveInWorkspace`, limite di 2 M caratteri, file mancante = `exists: false` (creato al primo salvataggio). Scrittura con `baseVersion`: se il file è cambiato nel frattempo restituisce il conflitto. Ricorda l'ultimo contenuto di ogni file per riconoscere l'eco delle proprie scritture. Ogni cambiamento → `version + 1` per tutti i panel sullo stesso file. `sync()` ricalcola i file da osservare. |
-| [files/FileWatcher.ts](src/main/files/FileWatcher.ts) | chokidar su un insieme esplicito di file (quelli dei panel), con `atomic` e `awaitWriteFinish`: i salvataggi "file temporaneo + rename" di editor e Plancia arrivano come un solo cambiamento. |
+| [files/FileWatcher.ts](src/main/files/FileWatcher.ts) | chokidar su un insieme esplicito di file (quelli dei panel), con `atomic` e `awaitWriteFinish`: i salvataggi "file temporaneo + rename" di editor e OpenPlancia arrivano come un solo cambiamento. |
 | [main/index.ts](src/main/index.ts) (parte M4) | Dialog nativo "Nuovo / Apri file markdown" (`createMarkdownPanel`), handler IPC `markdown:*`, sincronizzazione del watcher all'apertura di una cartella e quando si creano, duplicano o eliminano panel. |
 
 ### 9.7 Main — connessioni (M5)
@@ -504,14 +504,14 @@ flowchart TB
 | [main.tsx](src/renderer/main.tsx) · [App.tsx](src/renderer/App.tsx) | Avvio React, font (Geist), stili React Flow. `App` sceglie tra schermata iniziale e lavagna, avvia gli store. |
 | [index.css](src/renderer/index.css) | **Token del design** (colori caldi, accento `#D97757`, font) e override di React Flow e xterm. |
 | [canvas/Canvas.tsx](src/renderer/canvas/Canvas.tsx) | La lavagna React Flow: nodi, griglia, minimappa, pan/zoom (rotella = pan, pinch/Ctrl = zoom), conferma prima di eliminare, monta TopBar, ToolRail, zoom, ActivityPanel, FocusOverlay. |
-| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | Marchio + nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
+| [canvas/TopBar.tsx](src/renderer/canvas/TopBar.tsx) | Logo + OpenPlancia (clic = torna alla schermata iniziale, con conferma se ci sono terminali aperti), nome cartella (clic = cambia cartella), numero di agenti, versione di Claude nel tooltip. |
 | [canvas/ToolRail.tsx](src/renderer/canvas/ToolRail.tsx) · [tools.ts](src/renderer/canvas/tools.ts) | Barra strumenti verticale: puntatore, sposta lavagna, creazione panel, menu Markdown (nuovo / apri file), tooltip con scorciatoie. |
 | [canvas/useShortcuts.ts](src/renderer/canvas/useShortcuts.ts) | Scorciatoie a un tasto (V, H, T, L, M, A, K, Esc, 0). `isTyping` le disattiva in campi di testo, Monaco (`EditContext`), xterm e `.nokey`, e in modalità focus. |
 | [canvas/useCreatePanel.ts](src/renderer/canvas/useCreatePanel.ts) | Crea un panel al centro della vista, a cascata. `useCreateMarkdownPanel` chiede al main il dialog del file. |
 | [canvas/WireEdge.tsx](src/renderer/canvas/WireEdge.tsx) · [wireStyle.ts](src/renderer/canvas/wireStyle.ts) | Filo tra panel e Claude: colore e punte per verso, etichetta cliccabile (apre l'ispettore), tratteggio animato dopo ogni uso. Canvas in `ConnectionMode.Loose`: si trascina da una porta all'altra, `isValidConnection` e `onConnectEnd` usano le regole condivise. |
 | [canvas/ZoomControls.tsx](src/renderer/canvas/ZoomControls.tsx) | − / percentuale / + / adatta. |
 | [canvas/FocusOverlay.tsx](src/renderer/canvas/FocusOverlay.tsx) | Modalità focus: un panel a schermo pieno al 100%. Esc esce, tranne quando si scrive in un terminale. |
-| [components/](src/renderer/components/) | `EmptyState` (apri cartella), `ErrorToast`, `Logo`. |
+| [components/](src/renderer/components/) | `EmptyState` (schermata iniziale: apri cartella e cartelle recenti), `ErrorToast`, `InfoToast`, `Logo`. |
 
 ### 9.10 Renderer — panel
 
@@ -577,6 +577,7 @@ flowchart LR
 
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
+| — | Rinomina in **OpenPlancia**; schermata iniziale con cartelle recenti (clic sul logo = home); `WorkspaceService.goHome/recent/openRecent`. Identificatori interni (`.plancia/`, MCP `plancia`) invariati. |
 | M5 | Connessioni: nuova sezione 7 (regole, manifesto, MCP e protezione, Annulla, trasparenza), servizi M5 nella visione d'insieme, file nuovi in mappa |
 | M4 | Panel Markdown: MarkdownService e FileWatcher nella visione d'insieme, diagramma salvataggio / modifiche esterne / conflitti, nuovi file in mappa (main, renderer, test), nota su Monaco `EditContext` e `nokey` |
 | M3 | Prima versione: processi, flussi intenti/snapshot, terminali, integrazione Claude (hook, MCP, stati), dati su disco, mappa completa dei file |

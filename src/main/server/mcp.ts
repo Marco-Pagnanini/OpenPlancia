@@ -36,7 +36,7 @@ export function createPlanciaMcpServer(terminalId: string, deps: PlanciaMcpDeps)
     {
       title: 'Elenca i panel collegati',
       description:
-        "Elenca i panel della lavagna Plancia collegati a questa sessione: id, tipo, titolo, accesso (lettura/scrittura), versione, data dell'ultima modifica e file per i markdown.",
+        "Elenca i panel della lavagna OpenPlancia collegati a questa sessione: id, tipo, titolo, accesso (lettura/scrittura), versione, data dell'ultima modifica e file per i markdown.",
     },
     () => {
       deps.onToolCall(terminalId, 'list_panels');

@@ -38,12 +38,12 @@ export function renderManifest(entries: ManifestEntry[], changes: string[] = [])
     changes.length > 0 ? `Modificato dall'ultimo messaggio: ${changes.join('; ')}\n\n` : '';
   if (entries.length === 0) {
     return changes.length > 0
-      ? `${changeLine}Plancia — nessun panel è collegato a questa sessione. I contenuti dei panel ricevuti in precedenza non sono più accessibili e possono non essere aggiornati.`
+      ? `${changeLine}OpenPlancia — nessun panel è collegato a questa sessione. I contenuti dei panel ricevuti in precedenza non sono più accessibili e possono non essere aggiornati.`
       : '';
   }
 
   const head = [
-    'Plancia — panel collegati a questa sessione:',
+    'OpenPlancia — panel collegati a questa sessione:',
     ...entries.map(describePanel),
     TOOLS_LINE,
   ].join('\n');

@@ -11,7 +11,7 @@ import {
 import { claudeArgs, claudeLaunch, shellLaunch } from '../src/main/claude/ClaudeLauncher';
 
 describe('buildPtyEnv', () => {
-  it('drops Plancia variables and sets terminal info', () => {
+  it('drops OpenPlancia variables and sets terminal info', () => {
     const env = buildPtyEnv(
       {
         PATH: '/usr/bin',
@@ -33,7 +33,7 @@ describe('buildPtyEnv', () => {
       LANG: 'it_IT.UTF-8',
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      TERM_PROGRAM: 'Plancia',
+      TERM_PROGRAM: 'OpenPlancia',
       TERM_PROGRAM_VERSION: '0.0.1',
     });
   });

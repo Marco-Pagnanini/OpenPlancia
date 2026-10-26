@@ -144,6 +144,30 @@ describe('WorkspaceService', () => {
     await service.close({ notify: false });
   });
 
+  it('lists recent folders, goes home and reopens only known folders', async () => {
+    const other = join(dir, 'altro');
+    await mkdir(other);
+    const { service, onState } = makeService();
+    await service.open(project);
+    await service.open(other);
+    await service.open(project);
+    expect((await service.recent()).map((r) => [r.name, r.exists])).toEqual([
+      ['progetto', true],
+      ['altro', true],
+    ]);
+
+    await service.goHome();
+    expect(service.snapshot()).toBeNull();
+    expect(onState).toHaveBeenLastCalledWith(null);
+    expect((await loadSettings(settingsFile)).lastWorkspace).toBeUndefined();
+    await expect(makeService().service.restoreLast()).resolves.toBeNull();
+
+    const [, altro] = await service.recent();
+    await expect(service.openRecent(altro!.path)).resolves.toMatchObject({ name: 'altro' });
+    await expect(service.openRecent('/etc')).rejects.toThrow('non presente tra le recenti');
+    await service.close({ notify: false });
+  });
+
   it('forgets nothing when the last folder disappeared', async () => {
     const { service } = makeService();
     await service.open(project);

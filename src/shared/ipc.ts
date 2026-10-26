@@ -9,6 +9,9 @@ export const IpcChannels = {
   ping: 'plancia:ping',
   workspaceGet: 'plancia:workspace:get',
   workspaceOpenDialog: 'plancia:workspace:open-dialog',
+  workspaceClose: 'plancia:workspace:close',
+  workspaceRecent: 'plancia:workspace:recent',
+  workspaceOpenRecent: 'plancia:workspace:open-recent',
   /** main → renderer: the whole workspace snapshot after any change (or null when closed). */
   workspaceState: 'plancia:workspace:state',
   boardDispatch: 'plancia:board:dispatch',
@@ -51,6 +54,13 @@ export type OpenWorkspaceResult =
   | { status: 'opened'; snapshot: WorkspaceSnapshot }
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
+
+export interface RecentWorkspace {
+  path: string;
+  name: string;
+  /** False when the folder was moved or deleted. */
+  exists: boolean;
+}
 
 export type DispatchResult = { ok: true } | { ok: false; error: string };
 
@@ -141,6 +151,10 @@ export interface PlanciaApi {
     get(): Promise<WorkspaceSnapshot | null>;
     openDialog(): Promise<OpenWorkspaceResult>;
     onState(listener: (snapshot: WorkspaceSnapshot | null) => void): () => void;
+    /** Closes the board (stopping its terminals) and goes back to the home screen. */
+    close(): Promise<void>;
+    recent(): Promise<RecentWorkspace[]>;
+    openRecent(path: string): Promise<OpenWorkspaceResult>;
   };
   board: {
     dispatch(intent: BoardIntent): Promise<DispatchResult>;

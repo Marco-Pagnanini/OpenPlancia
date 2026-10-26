@@ -74,7 +74,7 @@ describe('per-terminal run files', () => {
     );
   });
 
-  it('adds the Plancia flags to new and resumed sessions, never --strict-mcp-config', () => {
+  it('adds the OpenPlancia flags to new and resumed sessions, never --strict-mcp-config', () => {
     const files = { mcpConfig: '/m.json', settings: '/s.json', systemPrompt: '/p.md' };
     const fresh = claudeArgs({ title: 'T' }, { id: 'id', resume: false }, files);
     expect(fresh).toEqual([

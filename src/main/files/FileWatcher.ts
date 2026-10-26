@@ -4,7 +4,7 @@ export type FileEvent = 'add' | 'change' | 'unlink';
 
 /**
  * Watches an explicit set of files (those shown in panels) with chokidar. Atomic saves
- * (write temp + rename, as editors and Plancia itself do) surface as a single change.
+ * (write temp + rename, as editors and OpenPlancia itself do) surface as a single change.
  */
 export class FileWatcher {
   private watcher: FSWatcher | null = null;

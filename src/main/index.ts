@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { access, rm } from 'node:fs/promises';
-import { basename, extname, join, relative } from 'node:path';
+import { basename, dirname, extname, join, relative } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import {
   IpcChannels,
@@ -18,6 +19,7 @@ import {
   terminalResizeSchema,
   terminalStartSchema,
   terminalWriteSchema,
+  workspacePathPayloadSchema,
 } from '@shared/schemas';
 import type { WorkspaceSnapshot } from '@shared/types';
 import { AccessService } from './access/AccessService';
@@ -52,6 +54,16 @@ const isDev = !app.isPackaged && process.env['ELECTRON_RENDERER_URL'] !== undefi
 const devUserData = process.env['PLANCIA_USER_DATA'];
 if (!app.isPackaged && devUserData) app.setPath('userData', devUserData);
 
+// The app was called "Plancia" before: carry its settings (recent folders) over once.
+if (!devUserData) {
+  const previous = join(app.getPath('appData'), 'plancia', 'settings.json');
+  const current = join(app.getPath('userData'), 'settings.json');
+  if (existsSync(previous) && !existsSync(current)) {
+    mkdirSync(dirname(current), { recursive: true });
+    copyFileSync(previous, current);
+  }
+}
+
 const resourcesDir = app.isPackaged
   ? join(process.resourcesPath, 'resources')
   : join(import.meta.dirname, '../../resources');
@@ -62,7 +74,7 @@ const runRoot = join(app.getPath('userData'), 'run');
 let mainWindow: BrowserWindow | null = null;
 
 function windowTitle(snapshot: WorkspaceSnapshot | null): string {
-  return snapshot ? `${snapshot.name} — Plancia` : 'Plancia';
+  return snapshot ? `${snapshot.name} — OpenPlancia` : 'OpenPlancia';
 }
 
 function send(channel: string, payload: unknown): void {
@@ -423,6 +435,20 @@ function registerIpc(): void {
   });
   ipcMain.handle(IpcChannels.workspaceGet, () => workspace.snapshot());
   ipcMain.handle(IpcChannels.workspaceOpenDialog, () => openWorkspaceDialog());
+  ipcMain.handle(IpcChannels.workspaceClose, () => workspace.goHome());
+  ipcMain.handle(IpcChannels.workspaceRecent, () => workspace.recent());
+  ipcMain.handle(
+    IpcChannels.workspaceOpenRecent,
+    async (_event, payload: unknown): Promise<OpenWorkspaceResult> => {
+      const parsed = workspacePathPayloadSchema.safeParse(payload);
+      if (!parsed.success) return { status: 'error', message: 'Richiesta non valida' };
+      try {
+        return { status: 'opened', snapshot: await workspace.openRecent(parsed.data.path) };
+      } catch (err) {
+        return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
   // The payload is untrusted: WorkspaceService validates it with zod.
   ipcMain.handle(IpcChannels.boardDispatch, (_event, intent: unknown) =>
     workspace.dispatch(intent),

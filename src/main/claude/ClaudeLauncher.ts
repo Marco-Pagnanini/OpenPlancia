@@ -50,10 +50,10 @@ export function claudeArgs(
 }
 
 /** Short system prompt appended to Claude's, written as facts (spec §7.4). */
-export const PLANCIA_SYSTEM_PROMPT = `Questa sessione di Claude Code gira dentro Plancia, una lavagna per sviluppatori con panel collegati da frecce.
+export const PLANCIA_SYSTEM_PROMPT = `Questa sessione di Claude Code gira dentro OpenPlancia, una lavagna per sviluppatori con panel collegati da frecce.
 Una freccia da un panel verso questo terminale dà accesso in lettura a quel panel; una freccia da questo terminale verso un panel dà accesso in scrittura.
 I panel collegati (file markdown, schemi di architettura) sono elencati dal tool mcp__plancia__list_panels.
-mcp__plancia__read_panel e mcp__plancia__write_panel sono l'unico modo corretto per leggere e modificare architetture e panel markdown collegati: Plancia verifica l'accesso e valida i contenuti.
+mcp__plancia__read_panel e mcp__plancia__write_panel sono l'unico modo corretto per leggere e modificare architetture e panel markdown collegati: OpenPlancia verifica l'accesso e valida i contenuti.
 L'utente vede sulla lavagna quali panel vengono letti e scritti.
 `;
 
@@ -62,7 +62,7 @@ function quoteSh(value: string): string {
 }
 
 /**
- * SessionStart only accepts command hooks: run the bundled bridge script with Plancia's own
+ * SessionStart only accepts command hooks: run the bundled bridge script with OpenPlancia's own
  * binary in Node mode, so no separate Node install is needed.
  */
 export function sessionStartCommand(nodeBinary: string, script: string, hookUrl: string): string {
@@ -88,7 +88,7 @@ const TOOL_EVENTS = new Set<string>([
 ]);
 const HOOK_TIMEOUT_S = 5;
 
-/** settings.json for one terminal: hooks towards the local server, Plancia tools pre-approved. */
+/** settings.json for one terminal: hooks towards the local server, OpenPlancia tools pre-approved. */
 export function hookSettings(hookUrl: string, startCommand: string, mcpTools: string[]) {
   const hooks: Record<string, unknown[]> = {
     SessionStart: [

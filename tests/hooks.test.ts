@@ -188,11 +188,11 @@ describe('handleHook', () => {
 describe('handleHook — arrows (M5)', () => {
   it('injects the manifest at session start and on prompts when there is one', async () => {
     const t = setup();
-    t.manifests.start = 'Plancia — panel collegati a questa sessione: …';
+    t.manifests.start = 'OpenPlancia — panel collegati a questa sessione: …';
     expect(await t.fire({ hook_event_name: 'SessionStart', source: 'startup' })).toEqual({
       hookSpecificOutput: {
         hookEventName: 'SessionStart',
-        additionalContext: 'Plancia — panel collegati a questa sessione: …',
+        additionalContext: 'OpenPlancia — panel collegati a questa sessione: …',
       },
     });
     expect(await t.fire({ hook_event_name: 'UserPromptSubmit', prompt: 'ciao' })).toBeNull();

@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { z } from 'zod';
-import type { DispatchResult } from '@shared/ipc';
+import type { DispatchResult, RecentWorkspace } from '@shared/ipc';
 import { boardIntentSchema } from '@shared/schemas';
 import type {
   AgentStatus,
@@ -14,6 +14,8 @@ import { BoardStore, fromPersisted, toPersisted, type BoardChange } from '../boa
 import { loadSettings, saveSettings } from '../settings/AppSettings';
 import { createDebouncedTask, type DebouncedTask } from '../util/debounce';
 import { readBoardFile, writeBoardFile } from './boardFile';
+
+const MAX_RECENT = 8;
 
 export interface WorkspaceServiceOptions {
   settingsFile: string;
@@ -118,10 +120,45 @@ export class WorkspaceService {
     this.current = { root, name: basename(root), store, saver, unsubscribe };
 
     const settings = await loadSettings(this.options.settingsFile);
-    await saveSettings(this.options.settingsFile, { ...settings, lastWorkspace: root });
+    const recentWorkspaces = [root, ...(settings.recentWorkspaces ?? []).filter((p) => p !== root)];
+    await saveSettings(this.options.settingsFile, {
+      ...settings,
+      lastWorkspace: root,
+      recentWorkspaces: recentWorkspaces.slice(0, MAX_RECENT),
+    });
 
     this.emit();
     return this.snapshot() as WorkspaceSnapshot;
+  }
+
+  /** Closes the board and forgets it as "last": the next launch shows the home screen. */
+  async goHome(): Promise<void> {
+    await this.close();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { lastWorkspace, ...settings } = await loadSettings(this.options.settingsFile);
+    await saveSettings(this.options.settingsFile, settings);
+  }
+
+  /** Recently opened folders, most recent first. */
+  async recent(): Promise<RecentWorkspace[]> {
+    const { recentWorkspaces = [] } = await loadSettings(this.options.settingsFile);
+    return Promise.all(
+      recentWorkspaces.map(async (path) => ({
+        path,
+        name: basename(path),
+        exists: await stat(path).then(
+          (s) => s.isDirectory(),
+          () => false,
+        ),
+      })),
+    );
+  }
+
+  /** Opens a folder from the recent list (and only from there). */
+  async openRecent(path: string): Promise<WorkspaceSnapshot> {
+    const { recentWorkspaces = [] } = await loadSettings(this.options.settingsFile);
+    if (!recentWorkspaces.includes(path)) throw new Error('Cartella non presente tra le recenti');
+    return this.open(path);
   }
 
   /** Reopens the last workspace if it still exists. Never throws. */

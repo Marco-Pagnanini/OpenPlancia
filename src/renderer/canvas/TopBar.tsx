@@ -25,20 +25,30 @@ function AgentsPill() {
 export function TopBar() {
   const name = useWorkspaceStore((s) => s.snapshot?.name);
   const openFolder = useWorkspaceStore((s) => s.openFolder);
+  const goHome = useWorkspaceStore((s) => s.goHome);
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between px-4">
-      <button
-        type="button"
-        onClick={() => void openFolder()}
-        title="Cambia cartella progetto"
-        className="pointer-events-auto flex items-center gap-2.5 rounded-[10px] border border-line bg-chrome py-[5px] pr-3 pl-2 hover:bg-raised"
-      >
-        <Logo className="size-[22px]" />
-        <span className="text-sm font-semibold tracking-[-0.01em]">plancia</span>
-        <span className="text-ink-7">/</span>
-        <span className="max-w-64 truncate font-mono text-[12.5px] text-ink-3">{name}</span>
-      </button>
+      <div className="pointer-events-auto flex items-center rounded-[10px] border border-line bg-chrome p-[3px]">
+        <button
+          type="button"
+          onClick={() => void goHome()}
+          title="Torna alla schermata iniziale"
+          className="flex items-center gap-2 rounded-[7px] py-[2px] pr-2 pl-1.5 hover:bg-raised"
+        >
+          <Logo className="size-[22px]" />
+          <span className="text-sm font-semibold tracking-[-0.01em]">OpenPlancia</span>
+        </button>
+        <span className="px-0.5 text-ink-7">/</span>
+        <button
+          type="button"
+          onClick={() => void openFolder()}
+          title="Cambia cartella progetto"
+          className="max-w-64 truncate rounded-[7px] px-2 py-[3px] font-mono text-[12.5px] text-ink-3 hover:bg-raised hover:text-ink-2"
+        >
+          {name}
+        </button>
+      </div>
       <div className="pointer-events-auto flex items-center gap-2">
         <AgentsPill />
       </div>

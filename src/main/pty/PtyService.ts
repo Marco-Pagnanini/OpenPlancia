@@ -1,6 +1,6 @@
 import type { Env } from '../env/shellEnv';
 
-/** The subset of node-pty's IPty that Plancia uses (injectable for tests). */
+/** The subset of node-pty's IPty that OpenPlancia uses (injectable for tests). */
 export interface PtyProcess {
   readonly pid: number;
   onData(listener: (data: string) => void): { dispose(): void };
