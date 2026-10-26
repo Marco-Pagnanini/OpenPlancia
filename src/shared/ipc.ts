@@ -1,5 +1,5 @@
 import type { ActivityEvent } from './activity';
-import type { BoardIntent, WorkspaceSnapshot } from './types';
+import type { BoardIntent, Position, WorkspaceSnapshot } from './types';
 
 /**
  * IPC channel names and the typed API exposed to the renderer as `window.plancia`.
@@ -24,6 +24,11 @@ export const IpcChannels = {
   terminalData: 'plancia:terminal:data',
   terminalExit: 'plancia:terminal:exit',
   terminalError: 'plancia:terminal:error',
+  markdownCreate: 'plancia:markdown:create',
+  markdownRead: 'plancia:markdown:read',
+  markdownWrite: 'plancia:markdown:write',
+  /** main → renderer: a markdown file changed outside the panel. */
+  markdownChanged: 'plancia:markdown:changed',
   activityList: 'plancia:activity:list',
   /** main → renderer: an activity entry was added or updated. */
   activityEvent: 'plancia:activity:event',
@@ -81,6 +86,27 @@ export interface TerminalErrorEvent {
   message: string;
 }
 
+export interface MarkdownDoc {
+  content: string;
+  /** Panel content version (spec §5): +1 on every change, from the panel or from outside. */
+  version: number;
+  exists: boolean;
+}
+
+export interface MarkdownChangedEvent extends MarkdownDoc {
+  id: string;
+}
+
+export type MarkdownCreateResult =
+  | { status: 'created'; panelId: string }
+  | { status: 'cancelled' }
+  | { status: 'error'; message: string };
+
+export type MarkdownWriteResult =
+  | { ok: true; version: number }
+  | { ok: false; code: 'conflict'; doc: MarkdownDoc }
+  | { ok: false; code: 'error'; message: string };
+
 export interface PlanciaApi {
   ping(): Promise<PingResponse>;
   workspace: {
@@ -109,6 +135,13 @@ export interface PlanciaApi {
     onData(listener: (event: TerminalDataEvent) => void): () => void;
     onExit(listener: (event: TerminalExitEvent) => void): () => void;
     onError(listener: (event: TerminalErrorEvent) => void): () => void;
+  };
+  markdown: {
+    /** Shows the native dialog ("new" or "open") and creates the panel at `position`. */
+    create(request: { mode: 'new' | 'open'; position: Position }): Promise<MarkdownCreateResult>;
+    read(id: string): Promise<MarkdownDoc>;
+    write(id: string, content: string, baseVersion: number): Promise<MarkdownWriteResult>;
+    onChanged(listener: (event: MarkdownChangedEvent) => void): () => void;
   };
   activity: {
     list(terminalId: string): Promise<ActivityEvent[]>;

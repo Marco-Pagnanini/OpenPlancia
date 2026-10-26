@@ -4,10 +4,17 @@ import { useUiStore } from '../stores/uiStore';
 import { TOOL_ITEMS } from './tools';
 import { useCreatePanel } from './useCreatePanel';
 
-function isTyping(target: EventTarget | null): boolean {
+/**
+ * True when the key belongs to a text field. Monaco on Chromium edits through an EditContext
+ * div (not a textarea, not contentEditable), and xterm keeps its own textarea: both count.
+ */
+export function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
   return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+    target.isContentEditable ||
+    ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+    ('editContext' in target && target.editContext != null) ||
+    target.closest('.monaco-editor, .xterm, .nokey') !== null
   );
 }
 
@@ -28,6 +35,7 @@ export function useShortcuts() {
       if (!item || item.kind === 'separator') return;
       e.preventDefault();
       if (item.kind === 'mode') setTool(item.tool);
+      else if (item.kind === 'markdown') useUiStore.getState().setMarkdownMenu(true);
       else createPanel(item.type, item.mode);
     };
     window.addEventListener('keydown', onKeyDown);

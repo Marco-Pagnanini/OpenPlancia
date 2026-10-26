@@ -61,6 +61,17 @@ export class WorkspaceService {
     if (this.getPanel(id)?.type === 'terminal') this.current?.store.setTerminalRuntime(id, patch);
   }
 
+  panels(): Panel[] {
+    return this.current?.store.getBoard().panels ?? [];
+  }
+
+  /** Records a content change of a panel; returns the new version. */
+  bumpContentVersion(id: string): number {
+    const store = this.current?.store;
+    if (!store) throw new Error('Nessuna cartella progetto aperta');
+    return store.bumpVersion(id);
+  }
+
   setClaudeSessionId(id: string, sessionId: string): void {
     this.current?.store.setClaudeSessionId(id, sessionId);
   }

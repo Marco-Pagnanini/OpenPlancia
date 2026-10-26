@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto';
-import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, rm } from 'node:fs/promises';
+import { basename, extname, join, relative } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
-import { IpcChannels, type AppInfo, type OpenWorkspaceResult } from '@shared/ipc';
+import {
+  IpcChannels,
+  type AppInfo,
+  type MarkdownCreateResult,
+  type OpenWorkspaceResult,
+} from '@shared/ipc';
 import {
   externalUrlSchema,
+  markdownCreateSchema,
+  markdownWriteSchema,
+  panelIdPayloadSchema,
   terminalIdPayloadSchema,
   terminalResizeSchema,
   terminalStartSchema,
@@ -20,6 +28,10 @@ import {
   writeRunFiles,
 } from './claude/ClaudeLauncher';
 import { buildPtyEnv, loginShellEnv } from './env/shellEnv';
+import { FileWatcher } from './files/FileWatcher';
+import { MarkdownService } from './files/MarkdownService';
+import { PathOutsideWorkspaceError, resolveInWorkspace } from './files/resolveInWorkspace';
+import { writeFileAtomic } from './util/atomicWrite';
 import { handlePing } from './ipc/ping';
 import { nodePtySpawn } from './pty/nodePtySpawn';
 import { PtyService } from './pty/PtyService';
@@ -52,12 +64,24 @@ function send(channel: string, payload: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
+let openRoot: string | null = null;
+
 const workspace = new WorkspaceService({
   settingsFile: join(app.getPath('userData'), 'settings.json'),
   onState: (snapshot) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitle(windowTitle(snapshot));
     send(IpcChannels.workspaceState, snapshot);
+    // A different folder was opened: watch its markdown files.
+    if (snapshot && snapshot.root !== openRoot) void markdown.sync();
+    openRoot = snapshot?.root ?? null;
   },
+});
+
+const watcher = new FileWatcher((path) => void markdown.fileChanged(path));
+const markdown: MarkdownService = new MarkdownService({
+  workspace,
+  watch: (paths) => watcher.setPaths(paths),
+  onExternalChange: (id, doc) => send(IpcChannels.markdownChanged, { id, ...doc }),
 });
 
 const ptyEnv = () => loginShellEnv().then((env) => buildPtyEnv(env, app.getVersion()));
@@ -156,7 +180,87 @@ workspace.onChange((change) => {
     void activity.remove(id);
   }
 });
-workspace.onBeforeClose(() => activity.reset());
+workspace.onBeforeClose(() => {
+  activity.reset();
+  markdown.reset();
+});
+workspace.onChange((change) => {
+  if (
+    change.type === 'createPanel' ||
+    change.type === 'deletePanels' ||
+    change.type === 'duplicatePanel'
+  ) {
+    void markdown.sync();
+  }
+});
+
+const MARKDOWN_FILTERS = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }];
+
+/** "Nuovo file markdown" / "Apri markdown": the file must live inside the project. */
+async function createMarkdownPanel(
+  mode: 'new' | 'open',
+  position: { x: number; y: number },
+): Promise<MarkdownCreateResult> {
+  const root = workspace.root();
+  if (!root) return { status: 'error', message: 'Nessuna cartella progetto aperta' };
+  let picked: string | undefined;
+  if (mode === 'new') {
+    const options: Electron.SaveDialogOptions = {
+      title: 'Nuovo file markdown',
+      buttonLabel: 'Crea',
+      defaultPath: join(root, 'NOTE.md'),
+      filters: MARKDOWN_FILTERS,
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    };
+    const result = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, options)
+      : await dialog.showSaveDialog(options);
+    picked = result.canceled ? undefined : result.filePath;
+  } else {
+    const options: Electron.OpenDialogOptions = {
+      title: 'Apri file markdown',
+      buttonLabel: 'Apri',
+      defaultPath: root,
+      filters: MARKDOWN_FILTERS,
+      properties: ['openFile'],
+    };
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
+    picked = result.canceled ? undefined : result.filePaths[0];
+  }
+  if (!picked) return { status: 'cancelled' };
+
+  try {
+    const path = await resolveInWorkspace(root, picked);
+    if (mode === 'new') {
+      // An existing file is never overwritten: the panel simply shows it.
+      const exists = await access(path).then(
+        () => true,
+        () => false,
+      );
+      if (!exists) await writeFileAtomic(path, `# ${basename(path, extname(path))}\n`);
+    }
+    const before = new Set(workspace.panels().map((p) => p.id));
+    const result = workspace.dispatch({
+      type: 'createPanel',
+      panelType: 'markdown',
+      position,
+      filePath: relative(root, path),
+    });
+    if (!result.ok) return { status: 'error', message: result.error };
+    const created = workspace.panels().find((p) => !before.has(p.id));
+    return created ? { status: 'created', panelId: created.id } : { status: 'cancelled' };
+  } catch (err) {
+    const message =
+      err instanceof PathOutsideWorkspaceError
+        ? 'Il file deve stare dentro la cartella del progetto.'
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    return { status: 'error', message };
+  }
+}
 
 // Detected once at startup (spec §7.1); shown in the UI.
 const appInfo: Promise<AppInfo> = ptyEnv().then(async (env) => {
@@ -277,6 +381,21 @@ function registerIpc(): void {
     const parsed = terminalWriteSchema.safeParse(payload);
     if (parsed.success) pty.write(parsed.data.id, parsed.data.data);
   });
+  ipcMain.handle(IpcChannels.markdownCreate, (_event, payload: unknown) => {
+    const parsed = markdownCreateSchema.safeParse(payload);
+    if (!parsed.success) return { status: 'error', message: 'Richiesta non valida' } as const;
+    return createMarkdownPanel(parsed.data.mode, parsed.data.position);
+  });
+  ipcMain.handle(IpcChannels.markdownRead, (_event, payload: unknown) => {
+    const parsed = panelIdPayloadSchema.parse(payload);
+    return markdown.read(parsed.id);
+  });
+  ipcMain.handle(IpcChannels.markdownWrite, (_event, payload: unknown) => {
+    const parsed = markdownWriteSchema.safeParse(payload);
+    if (!parsed.success)
+      return { ok: false, code: 'error', message: 'Richiesta non valida' } as const;
+    return markdown.write(parsed.data.id, parsed.data.content, parsed.data.baseVersion);
+  });
   ipcMain.handle(IpcChannels.activityList, (_event, payload: unknown) => {
     const parsed = terminalIdPayloadSchema.safeParse(payload);
     return parsed.success ? activity.list(parsed.data.id) : [];
@@ -320,7 +439,7 @@ app.on('before-quit', (event) => {
       () =>
         void workspace
           .close({ notify: false })
-          .then(() => server.stop())
+          .then(() => Promise.all([server.stop(), watcher.close()]))
           .finally(() => app.quit()),
     );
 });

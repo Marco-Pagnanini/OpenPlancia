@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { basename } from 'node:path';
 import { BOARD_SCHEMA_VERSION } from '@shared/schemas';
 import { DEFAULT_PANEL_SIZES, MIN_PANEL_SIZE, defaultPanelTitle } from '@shared/panels';
 import type {
@@ -27,7 +28,10 @@ export interface BoardStoreOptions {
 /** Changes made by the main process itself, not requested by the renderer. */
 export type InternalChange =
   /** Runtime-only terminal state: broadcast but never persisted. */
-  { type: 'terminalRuntime'; id: string } | { type: 'claudeSession'; id: string };
+  | { type: 'terminalRuntime'; id: string }
+  | { type: 'claudeSession'; id: string }
+  /** The content of a panel changed (file saved, edited outside…): version +1. */
+  | { type: 'contentVersion'; id: string; version: number };
 
 export type BoardChange = BoardIntent | InternalChange;
 
@@ -116,6 +120,17 @@ export class BoardStore {
     this.commit(this.replacePanel(this.board, next), { type: 'terminalRuntime', id });
   }
 
+  /** Content of a panel changed: version +1 (persisted). Returns the new version. */
+  bumpVersion(id: string): number {
+    const panel = this.requirePanel(this.board, id);
+    const version = panel.version + 1;
+    this.commit(
+      this.replacePanel(this.board, { ...panel, version, updatedAt: this.now().toISOString() }),
+      { type: 'contentVersion', id, version },
+    );
+    return version;
+  }
+
   setClaudeSessionId(id: string, sessionId: string): void {
     const panel = this.requireTerminal(this.board, id);
     this.commit(this.replacePanel(this.board, { ...panel, claudeSessionId: sessionId }), {
@@ -142,7 +157,13 @@ export class BoardStore {
   private reduce(board: Board, intent: BoardIntent): Board {
     switch (intent.type) {
       case 'createPanel': {
-        const panel = this.newPanel(board, intent.panelType, intent.position, intent.mode);
+        const panel = this.newPanel(
+          board,
+          intent.panelType,
+          intent.position,
+          intent.mode,
+          intent.filePath,
+        );
         return { ...board, panels: [...board.panels, panel] };
       }
       case 'movePanels': {
@@ -223,10 +244,17 @@ export class BoardStore {
     type: PanelType,
     position: Position,
     mode: TerminalMode = 'shell',
+    filePath?: string,
   ): Panel {
+    if (type === 'markdown' && !filePath) {
+      throw new BoardError('Un panel markdown ha bisogno di un file');
+    }
     const base = {
       id: this.newId(board, type),
-      title: this.uniqueTitle(board, defaultPanelTitle(type, mode)),
+      title: this.uniqueTitle(
+        board,
+        type === 'markdown' && filePath ? basename(filePath) : defaultPanelTitle(type, mode),
+      ),
       position,
       size: DEFAULT_PANEL_SIZES[type],
       version: 1,
@@ -236,8 +264,7 @@ export class BoardStore {
       case 'terminal':
         return { ...base, type, mode, cwd: '.', status: 'not-started' };
       case 'markdown':
-        // Placeholder until M4 lets the user pick or create the file.
-        return { ...base, type, filePath: 'AGENTS.md' };
+        return { ...base, type, filePath: filePath ?? '' };
       case 'architecture':
         return { ...base, type };
       case 'code':

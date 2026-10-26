@@ -522,7 +522,7 @@ plancia/
 | M1 Canvas e workspace | fatto | React Flow 12 + zustand. Intenti validati con zod nel main (`BoardStore`), snapshot completo al renderer. Salvataggio con debounce 500 ms e flush su `before-quit`. Verificato: 3 panel, chiusura e riapertura con lo stesso layout. |
 | M2 Terminale | fatto | node-pty 1.1 (N-API, nessun rebuild per Electron) + xterm 6 (fit, webgl, web-links). Verificati: colori 16/256/truecolor, vim, top (htop non installato), Ctrl+C, Claude Code con `--session-id`/`--name` e ripresa con `--resume`, modalità focus, anteprima sotto il 60%, nessun processo orfano dopo Cmd+Q. |
 | M3 Server locale e hook | fatto | Server su 127.0.0.1 (porta casuale, token di 32 byte nel path, controllo di Host e Origin). Hook http + bridge `command` per SessionStart, MCP `plancia` stateless con `list_panels`. Verificati con Claude Code 2.1.310: badge `al lavoro` con il tool corrente → `in attesa`, `richiede input` sul permesso di Write, timeline in Attività, `list_panels` chiamato senza prompt. |
-| M4 Markdown | da fare | |
+| M4 Markdown | fatto | Monaco 0.57 (locale, lazy) + react-markdown/GFM, chokidar 5, versioni per panel, autosalvataggio 500 ms, conflitti. Verificati: modifica esterna di `AGENTS.md` → il panel si aggiorna; modifica nel panel → il file si aggiorna; conflitto con bozza non salvata. |
 | M5 Connessioni | da fare | |
 | M6 Architettura | da fare | |
 | M7 Codice | da fare | |
@@ -563,3 +563,9 @@ plancia/
 - [x] **File di runtime**: `userData/run/<terminalId>/{mcp,settings}.json` (0600, cartella 0700) e `run/plancia-system.md`. Token nuovo a ogni avvio di Claude; la cartella `run` viene svuotata all'avvio dell'app.
 - [x] **Server MCP stateless**: un `McpServer` + trasporto Streamable HTTP per richiesta (`enableJsonResponse`), GET/DELETE → 405. Il server locale rifiuta Host diversi da `127.0.0.1:<porta>`/`localhost:<porta>` e qualsiasi richiesta con header `Origin` (protezione da DNS rebinding e da pagine web).
 - [x] **Versione minima di Claude Code**: gli hook http e i campi usati funzionano dalla 2.1.296; `onFailure` richiede 2.1.295. Proposta: minimo 2.1.296.
+- [x] **chokidar 5 invece di 6** (M4): chokidar 6 richiede Node ≥ 22.22, i test girano su Node 22.14. La 5 ha la stessa API e richiede Node ≥ 20.19.
+- [x] **DOMPurify forzato a 3.4.17** (`overrides` nel `package.json`, M4): monaco-editor 0.57 dipende da DOMPurify 3.4.15, interessata da avvisi di sicurezza critici. La 3.4.17 non è vulnerabile; `npm audit` è pulito.
+- [x] **Monaco e tastiera** (M4): su Chromium Monaco scrive tramite `EditContext` (un `div`, non una `textarea`). Senza correzioni, scrivendo nell'editor `t` creava un terminale, `m` apriva il menu e Backspace eliminava il panel. Ora le scorciatoie ignorano `.monaco-editor`, `.xterm`, `.nokey` ed elementi con `editContext`, e il corpo dei panel ha la classe `nokey` (React Flow ignora i suoi tasti lì dentro).
+- [x] **Creazione dei panel Markdown** (M4): il dialog nativo "Nuovo / Apri" è mostrato dal main, che accetta solo file dentro il progetto e non sovrascrive mai un file esistente ("Nuovo" su un file già esistente lo apre). L'intento `createPanel` di tipo markdown richiede `filePath`. Il dialog nativo non è coperto dai test automatici: va provato a mano.
+- [x] **Versione dei panel Markdown** (M4): +1 a ogni salvataggio dal panel e a ogni modifica esterna rilevata; le scritture portano la `baseVersion` e vengono rifiutate se il file è cambiato nel frattempo (avviso di conflitto nel panel). La cronologia per "Annulla" arriva con la M5 (spec §7.5).
+- [x] **Dimensione del bundle** (M4): Monaco aggiunge circa 20 MB di asset, compresi i worker dei linguaggi caricati solo quando servono. Accettabile per un'app desktop, ed è riusato dal panel Codice in M7.

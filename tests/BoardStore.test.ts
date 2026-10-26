@@ -27,7 +27,12 @@ describe('BoardStore', () => {
     const store = makeStore();
     store.apply({ type: 'createPanel', panelType: 'terminal', position: at });
     store.apply({ type: 'createPanel', panelType: 'terminal', position: at, mode: 'claude' });
-    store.apply({ type: 'createPanel', panelType: 'markdown', position: at });
+    store.apply({
+      type: 'createPanel',
+      panelType: 'markdown',
+      position: at,
+      filePath: 'AGENTS.md',
+    });
     store.apply({ type: 'createPanel', panelType: 'architecture', position: at });
     store.apply({ type: 'createPanel', panelType: 'code', position: at });
 
@@ -63,7 +68,12 @@ describe('BoardStore', () => {
   it('moves several panels without bumping the content version', () => {
     const store = makeStore();
     store.apply({ type: 'createPanel', panelType: 'code', position: at });
-    store.apply({ type: 'createPanel', panelType: 'markdown', position: at });
+    store.apply({
+      type: 'createPanel',
+      panelType: 'markdown',
+      position: at,
+      filePath: 'AGENTS.md',
+    });
     const [a, b] = store.getBoard().panels;
     store.apply({
       type: 'movePanels',
@@ -169,6 +179,40 @@ describe('BoardStore', () => {
     unsubscribe();
     store.apply(intent);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('markdown panels', () => {
+  it('need a file and take its name as title', () => {
+    const store = makeStore();
+    expect(() => store.apply({ type: 'createPanel', panelType: 'markdown', position: at })).toThrow(
+      BoardError,
+    );
+    store.apply({
+      type: 'createPanel',
+      panelType: 'markdown',
+      position: at,
+      filePath: 'docs/NOTE.md',
+    });
+    store.apply({ type: 'createPanel', panelType: 'markdown', position: at, filePath: 'NOTE.md' });
+    expect(
+      store.getBoard().panels.map((p) => [p.title, p.type === 'markdown' && p.filePath]),
+    ).toEqual([
+      ['NOTE.md', 'docs/NOTE.md'],
+      ['NOTE.md 2', 'NOTE.md'],
+    ]);
+  });
+
+  it('bumps the content version as a persisted change', () => {
+    const store = makeStore();
+    store.apply({ type: 'createPanel', panelType: 'markdown', position: at, filePath: 'A.md' });
+    const id = store.getBoard().panels[0]!.id;
+    const listener = vi.fn();
+    store.subscribe(listener);
+    expect(store.bumpVersion(id)).toBe(2);
+    expect(store.bumpVersion(id)).toBe(3);
+    expect(store.getBoard().panels[0]!.version).toBe(3);
+    expect(listener.mock.calls[1]![1]).toEqual({ type: 'contentVersion', id, version: 3 });
   });
 });
 

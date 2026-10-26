@@ -8,6 +8,7 @@ import { PANEL_DRAG_HANDLE, useWorkspaceStore, type PanelNode } from '../stores/
 import { PanelIcon } from './PanelIcon';
 import { PanelPlaceholder } from './PanelPlaceholder';
 import { confirmDelete, panelKindLabel } from './panelMeta';
+import { MarkdownBody } from './markdown/MarkdownBody';
 import { StatusBadge } from './StatusBadge';
 import { TerminalBody } from './terminal/TerminalBody';
 import { TerminalPreview } from './terminal/TerminalPreview';
@@ -147,6 +148,7 @@ export function PanelContent({ panel, variant }: { panel: Panel; variant: 'panel
       <TerminalBody panel={panel} variant={variant} />
     );
   }
+  if (panel.type === 'markdown') return <MarkdownBody panel={panel} variant={variant} />;
   return <PanelPlaceholder panel={panel} />;
 }
 
@@ -271,7 +273,8 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
       </header>
       {/* In hand mode the body must let the pan gesture through. */}
       <div
-        className={`${hand ? '' : 'nodrag nowheel nopan'} min-h-0 flex-1 overflow-hidden rounded-b-[11px]`}
+        // nokey: React Flow must not treat Backspace typed in an editor as "delete the panel".
+        className={`${hand ? '' : 'nodrag nowheel nopan'} nokey min-h-0 flex-1 overflow-hidden rounded-b-[11px]`}
       >
         <PanelContent panel={panel} variant="panel" />
       </div>

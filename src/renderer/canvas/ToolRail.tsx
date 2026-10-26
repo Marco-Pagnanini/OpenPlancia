@@ -1,6 +1,48 @@
+import { FilePlusIcon, FolderOpenIcon } from '@phosphor-icons/react';
+import { useEffect, useRef } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { TOOL_ITEMS, type ToolItem } from './tools';
-import { useCreatePanel } from './useCreatePanel';
+import { useCreateMarkdownPanel, useCreatePanel } from './useCreatePanel';
+
+function MarkdownMenu() {
+  const setOpen = useUiStore((s) => s.setMarkdownMenu);
+  const createMarkdown = useCreateMarkdownPanel();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ref.current?.querySelector('button')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setOpen]);
+
+  const pick = (mode: 'new' | 'open') => {
+    setOpen(false);
+    void createMarkdown(mode);
+  };
+  const item =
+    'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-2 hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none';
+
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+      }}
+      className="absolute top-1/2 left-[calc(100%+12px)] z-10 w-56 -translate-y-1/2 rounded-[10px] border border-line-strong bg-chrome p-1 shadow-[0_24px_60px_rgba(0,0,0,.55)]"
+    >
+      <button type="button" role="menuitem" className={item} onClick={() => pick('new')}>
+        <FilePlusIcon size={15} className="text-ink-3" />
+        Nuovo file markdown…
+      </button>
+      <button type="button" role="menuitem" className={item} onClick={() => pick('open')}>
+        <FolderOpenIcon size={15} className="text-ink-3" />
+        Apri file markdown…
+      </button>
+    </div>
+  );
+}
 
 function Tooltip({ label, shortcut }: { label: string; shortcut: string }) {
   return (
@@ -18,29 +60,41 @@ export function ToolRail() {
   const tool = useUiStore((s) => s.tool);
   const setTool = useUiStore((s) => s.setTool);
   const createPanel = useCreatePanel();
+  const markdownMenu = useUiStore((s) => s.markdownMenu);
+  const setMarkdownMenu = useUiStore((s) => s.setMarkdownMenu);
 
   const render = (item: ToolItem, index: number) => {
     if (item.kind === 'separator') {
       return <div key={`sep-${index}`} className="my-1 h-px w-6 bg-line" />;
     }
-    const active = item.kind === 'mode' && item.tool === tool;
+    const active =
+      (item.kind === 'mode' && item.tool === tool) || (item.kind === 'markdown' && markdownMenu);
     const onClick =
-      item.kind === 'mode' ? () => setTool(item.tool) : () => createPanel(item.type, item.mode);
+      item.kind === 'mode'
+        ? () => setTool(item.tool)
+        : item.kind === 'markdown'
+          ? () => setMarkdownMenu(!markdownMenu)
+          : () => createPanel(item.type, item.mode);
     const Glyph = item.icon;
     return (
-      <button
-        key={item.label}
-        type="button"
-        aria-label={item.kind === 'create' ? `Nuovo panel: ${item.label}` : item.label}
-        aria-pressed={item.kind === 'mode' ? active : undefined}
-        onClick={onClick}
-        className={`group relative grid size-10 place-items-center rounded-[10px] transition-colors active:scale-[.96] ${
-          active ? 'bg-accent/16 text-accent' : 'text-ink-tool hover:bg-hover hover:text-ink'
-        }`}
-      >
-        <Glyph size={19} />
-        <Tooltip label={item.label} shortcut={item.key} />
-      </button>
+      <div key={item.label} className="relative">
+        <button
+          type="button"
+          aria-label={item.kind === 'mode' ? item.label : `Nuovo panel: ${item.label}`}
+          aria-pressed={item.kind === 'mode' ? active : undefined}
+          aria-expanded={item.kind === 'markdown' ? markdownMenu : undefined}
+          onClick={onClick}
+          className={`group relative grid size-10 place-items-center rounded-[10px] transition-colors active:scale-[.96] ${
+            active ? 'bg-accent/16 text-accent' : 'text-ink-tool hover:bg-hover hover:text-ink'
+          }`}
+        >
+          <Glyph size={19} />
+          {!(item.kind === 'markdown' && markdownMenu) && (
+            <Tooltip label={item.label} shortcut={item.key} />
+          )}
+        </button>
+        {item.kind === 'markdown' && markdownMenu && <MarkdownMenu />}
+      </div>
     );
   };
 
