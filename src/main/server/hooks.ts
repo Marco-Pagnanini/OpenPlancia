@@ -19,8 +19,11 @@ export interface HookDeps {
   needsAttention(id: string, message: string): void;
   /** Manifest to inject now, or null (spec §7.4). */
   manifest(id: string, moment: 'start' | 'prompt'): Promise<string | null>;
-  /** Denial reason when the arrows forbid this file write (spec §7.5), else null. */
-  checkFileWrite(
+  /**
+   * Denial reason when the arrows forbid this tool call, else null: a file write without a
+   * write arrow (spec §7.5), a message to an agent without an arrow (M8).
+   */
+  checkTool(
     id: string,
     toolName: string,
     toolInput: Record<string, unknown> | undefined,
@@ -28,6 +31,15 @@ export interface HookDeps {
   ): Promise<string | null>;
   /** Claude changed a file (Write/Edit/MultiEdit/NotebookEdit done): the Code panel feed. */
   fileTouched?(id: string, toolName: string, path: string, cwd: string | undefined): void;
+  /** The session's inbox address, from SessionStart: other agents reply to it (M8). */
+  setMessagingAddress?(id: string, address: string): void;
+  /** A tool call ended well (PostToolUse): subagents started, messages sent to agents. */
+  toolDone?(
+    id: string,
+    toolName: string,
+    input: Record<string, unknown> | undefined,
+    response: unknown,
+  ): void;
 }
 
 /** JSON body returned to Claude Code; null means "200 with an empty body". */
@@ -76,6 +88,9 @@ export async function handleHook(
         deps.setSessionId(terminalId, hook.session_id);
       }
       deps.setRuntime(terminalId, { status: 'idle', currentTool: undefined });
+      if (hook.plancia_messaging_socket) {
+        deps.setMessagingAddress?.(terminalId, hook.plancia_messaging_socket);
+      }
       const how =
         hook.source === 'resume' ? 'ripresa' : hook.source === 'clear' ? 'azzerata' : 'avviata';
       deps.appendActivity(terminalId, { kind: 'session', title: `Sessione ${how}` });
@@ -93,7 +108,7 @@ export async function handleHook(
       const name = hook.tool_name ?? 'Tool';
       const label = toolLabel(name, hook.tool_input, root);
       const path = toolFilePath(hook.tool_input);
-      const denied = await deps.checkFileWrite(terminalId, name, hook.tool_input, hook.cwd);
+      const denied = await deps.checkTool(terminalId, name, hook.tool_input, hook.cwd);
       deps.appendActivity(terminalId, {
         kind: 'tool',
         title: label,
@@ -107,7 +122,10 @@ export async function handleHook(
       if (denied) {
         deps.appendActivity(terminalId, {
           kind: 'error',
-          title: 'Scrittura negata dalle frecce',
+          title:
+            name === 'SendMessage'
+              ? 'Messaggio negato dalle frecce'
+              : 'Scrittura negata dalle frecce',
           detail: denied,
         });
         return {
@@ -132,6 +150,9 @@ export async function handleHook(
       const touched = toolFilePath(hook.tool_input);
       if (!failed && touched && EDIT_TOOLS.has(hook.tool_name ?? '')) {
         deps.fileTouched?.(terminalId, hook.tool_name ?? '', touched, hook.cwd);
+      }
+      if (!failed && hook.tool_name) {
+        deps.toolDone?.(terminalId, hook.tool_name, hook.tool_input, hook.tool_response);
       }
       if (failed && hook.error) {
         deps.appendActivity(terminalId, {

@@ -20,17 +20,18 @@ import { WireInspector } from '../inspectors/WireInspector';
 import { PanelNodeComponent } from '../panels/PanelNode';
 import { confirmDelete } from '../panels/panelMeta';
 import { useUiStore } from '../stores/uiStore';
-import { useWorkspaceStore, type PanelNode, type WireEdge } from '../stores/workspaceStore';
+import { useWorkspaceStore, type BoardEdge, type PanelNode } from '../stores/workspaceStore';
 import { FocusOverlay } from './FocusOverlay';
 import { TOOL_HINTS } from './tools';
 import { ToolRail } from './ToolRail';
 import { TopBar } from './TopBar';
 import { useShortcuts } from './useShortcuts';
+import { AgentEdgeComponent } from './AgentEdge';
 import { WireEdgeComponent } from './WireEdge';
 import { ZoomControls } from './ZoomControls';
 
 const nodeTypes: NodeTypes = { panel: PanelNodeComponent };
-const edgeTypes: EdgeTypes = { wire: WireEdgeComponent };
+const edgeTypes: EdgeTypes = { wire: WireEdgeComponent, agent: AgentEdgeComponent };
 
 /** Arrow rules checked against the main-process board (the main checks them again). */
 function check(source: string | null, target: string | null) {
@@ -107,8 +108,12 @@ export function Canvas() {
   );
 
   const onEdgesDelete = useCallback(
-    (deleted: WireEdge[]) => {
-      const ids = deleted.flatMap((e) => e.data?.pair.connectionIds ?? []);
+    (deleted: BoardEdge[]) => {
+      const ids = deleted.flatMap((e) => {
+        const data = e.data;
+        if (!data) return [];
+        return 'pair' in data ? data.pair.connectionIds : data.agents.connectionIds;
+      });
       if (ids.length > 0) void dispatch({ type: 'disconnect', ids });
     },
     [dispatch],
@@ -116,7 +121,7 @@ export function Canvas() {
 
   return (
     <div className={`relative h-full w-full ${hand ? '[&_.react-flow__pane]:cursor-grab' : ''}`}>
-      <ReactFlow<PanelNode, WireEdge>
+      <ReactFlow<PanelNode, BoardEdge>
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}

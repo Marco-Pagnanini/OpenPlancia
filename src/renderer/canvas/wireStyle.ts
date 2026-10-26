@@ -9,6 +9,9 @@ export const WIRE_COLORS = {
 
 export type WireKind = keyof typeof WIRE_COLORS;
 
+/** Arrows between two Claude terminals (M8): messages, not data. */
+export const AGENT_COLOR = '#6fbfae';
+
 export function wireKind(pair: Pick<WirePair, 'read' | 'write'>): WireKind {
   return pair.read && pair.write ? 'both' : pair.read ? 'read' : 'write';
 }

@@ -8,13 +8,16 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import { create } from 'zustand';
-import { wirePairs, type WirePair } from '@shared/access';
+import { agentPairs, wirePairs, type AgentPair, type WirePair } from '@shared/access';
 import type { BoardIntent, Panel, WorkspaceSnapshot } from '@shared/types';
-import { WIRE_COLORS, wireKind } from '../canvas/wireStyle';
+import { AGENT_COLOR, WIRE_COLORS, wireKind } from '../canvas/wireStyle';
 import { terminalRegistry } from '../panels/terminal/terminalRegistry';
 
 export type PanelNode = Node<{ panel: Panel }, 'panel'>;
 export type WireEdge = Edge<{ pair: WirePair }, 'wire'>;
+/** Arrows between two Claude terminals: who may message whom (M8). */
+export type AgentEdge = Edge<{ agents: AgentPair }, 'agent'>;
+export type BoardEdge = WireEdge | AgentEdge;
 
 interface WorkspaceState {
   /** Mirror of the main process state; never edited locally. */
@@ -23,8 +26,11 @@ interface WorkspaceState {
   error: string | null;
   /** React Flow nodes: derived from the snapshot plus transient UI state (selection, drag). */
   nodes: PanelNode[];
-  /** One wire per terminal ↔ panel pair (read + write share a purple double-headed wire). */
-  edges: WireEdge[];
+  /**
+   * One wire per terminal ↔ panel pair (read + write share a purple double-headed wire), and one
+   * per pair of Claude terminals that may message each other.
+   */
+  edges: BoardEdge[];
   init(): () => void;
   openFolder(): Promise<void>;
   /** Back to the home screen; asks first if terminals would be closed. */
@@ -32,19 +38,48 @@ interface WorkspaceState {
   openRecent(path: string): Promise<void>;
   dispatch(intent: BoardIntent): Promise<boolean>;
   applyNodeChanges(changes: NodeChange<PanelNode>[]): void;
-  applyEdgeChanges(changes: EdgeChange<WireEdge>[]): void;
+  applyEdgeChanges(changes: EdgeChange<BoardEdge>[]): void;
   clearError(): void;
 }
 
 export const PANEL_DRAG_HANDLE = 'panel-drag-handle';
 
 /** Wires leave from the side facing the other panel. */
-function toEdges(snapshot: WorkspaceSnapshot, previous: WireEdge[]): WireEdge[] {
+function toAgentEdges(snapshot: WorkspaceSnapshot, selected: Set<string>): AgentEdge[] {
+  const { panels, connections } = snapshot.board;
+  const byId = new Map(panels.map((p) => [p.id, p]));
+  const center = (p: Panel) => p.position.x + p.size.width / 2;
+  const marker = { type: MarkerType.ArrowClosed, color: AGENT_COLOR, width: 16, height: 16 };
+  return agentPairs(panels, connections).flatMap((agents) => {
+    // The arrow points from the agent that writes to the one that receives.
+    const [from, to] = agents.bToA && !agents.aToB ? [agents.b, agents.a] : [agents.a, agents.b];
+    const source = byId.get(from);
+    const target = byId.get(to);
+    if (!source || !target) return [];
+    const leftToRight = center(source) <= center(target);
+    return [
+      {
+        id: agents.key,
+        type: 'agent' as const,
+        source: source.id,
+        target: target.id,
+        sourceHandle: leftToRight ? 'r' : 'l',
+        targetHandle: leftToRight ? 'l' : 'r',
+        data: { agents },
+        selected: selected.has(agents.key),
+        markerEnd: marker,
+        ...(agents.aToB && agents.bToA ? { markerStart: marker } : {}),
+      },
+    ];
+  });
+}
+
+function toEdges(snapshot: WorkspaceSnapshot, previous: BoardEdge[]): BoardEdge[] {
   const { panels, connections } = snapshot.board;
   const byId = new Map(panels.map((p) => [p.id, p]));
   const selected = new Set(previous.filter((e) => e.selected).map((e) => e.id));
   const center = (p: Panel) => p.position.x + p.size.width / 2;
-  return wirePairs(panels, connections).flatMap((pair) => {
+  const wires: WireEdge[] = wirePairs(panels, connections).flatMap((pair): WireEdge[] => {
     const terminal = byId.get(pair.terminalId);
     const panel = byId.get(pair.panelId);
     if (!terminal || !panel) return [];
@@ -80,6 +115,7 @@ function toEdges(snapshot: WorkspaceSnapshot, previous: WireEdge[]): WireEdge[] 
       },
     ];
   });
+  return [...wires, ...toAgentEdges(snapshot, selected)];
 }
 
 function toNodes(panels: Panel[], previous: PanelNode[]): PanelNode[] {

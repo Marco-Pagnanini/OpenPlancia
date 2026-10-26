@@ -12,7 +12,7 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-213%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/test-227%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
 [![Stato](https://img.shields.io/badge/stato-MVP%20completo-2EA44F?style=flat-square)](#%EF%B8%8F-roadmap)
 
 [Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
@@ -117,6 +117,15 @@ Il panel **Codice** elenca i file che gli agenti modificano, il più recente in 
 <tr>
 <td colspan="2" valign="top">
 
+### 🤝 Agenti che si scrivono
+
+Una freccia tra due terminali Claude dà al primo il permesso di **scrivere al secondo** con i messaggi nativi di Claude Code: "chiedi a Claude 2 di…", e l'altro esegue e risponde. Senza freccia il messaggio è bloccato, così come quelli verso sessioni fuori dalla lavagna. Il filo turchese si anima a ogni messaggio e l'ispettore li conserva.
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+
 ### 📐 Schemi di architettura che Claude capisce e modifica
 
 Disegni servizi, API, database e code con un editor a nodi; Claude li riceve come **JSON validato** e li può modificare. Se gli chiedi "aggiungi una coda tra API e worker", il diagramma si aggiorna: i nodi nuovi si posizionano da soli vicino a quelli collegati e quelli esistenti restano dove li hai messi. Un documento non valido viene rifiutato con l'errore esatto (es. `to: il nodo "fantasma" non esiste`), e **"Vedi JSON"** mostra quello che riceve Claude.
@@ -144,12 +153,13 @@ flowchart LR
     linkStyle 2 stroke:#b294d6,stroke-width:2px
 ```
 
-| Freccia                  | Colore   | Cosa può fare Claude                                            |
-| ------------------------ | -------- | --------------------------------------------------------------- |
-| panel → Claude           | 🔵 blu   | legge il contenuto, che gli arriva nel contesto                 |
-| Claude → panel           | 🟠 ambra | scrive il file (con `Write`/`Edit` o con il tool `write_panel`) |
-| in entrambe le direzioni | 🟣 viola | legge e scrive                                                  |
-| nessuna freccia          | —        | niente: le scritture sui file dei panel vengono bloccate        |
+| Freccia                  | Colore      | Cosa può fare Claude                                            |
+| ------------------------ | ----------- | --------------------------------------------------------------- |
+| panel → Claude           | 🔵 blu      | legge il contenuto, che gli arriva nel contesto                 |
+| Claude → panel           | 🟠 ambra    | scrive il file (con `Write`/`Edit` o con il tool `write_panel`) |
+| in entrambe le direzioni | 🟣 viola    | legge e scrive                                                  |
+| nessuna freccia          | —           | niente: le scritture sui file dei panel vengono bloccate        |
+| Claude → altro Claude    | 🟢 turchese | gli scrive con `SendMessage` (doppia freccia: si scrivono)      |
 
 <details>
 <summary><b>Come funziona sotto il cofano</b></summary>
@@ -296,7 +306,7 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 - [x] **M6** · Panel Architettura: schemi in JSON validato che Claude legge e modifica, layout automatico, "Vedi JSON"
 - [x] **M6.5** · Panel Cartella: albero dei `.md` di una cartella, una freccia per tutta la cartella, Claude crea e modifica file
 - [x] **M7** · Panel Codice: file modificati dagli agenti, diff con `HEAD` in sola lettura, in tempo reale
-- [ ] **Dopo l'MVP** · Multi-agente: frecce tra terminali Claude
+- [x] **M8** · Multi-agente: frecce tra terminali Claude che governano i messaggi nativi di Claude Code
 
 ## 🔒 Sicurezza
 

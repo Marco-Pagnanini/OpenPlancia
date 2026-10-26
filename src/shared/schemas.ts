@@ -44,6 +44,8 @@ export const persistedTerminalPanelSchema = z.object({
   mode: terminalModeSchema,
   cwd: z.string(),
   claudeSessionId: z.uuid().optional(),
+  /** Name the Claude session got when it was created (--name): other agents address it so (M8). */
+  claudeName: z.string().optional(),
 });
 
 export const markdownPanelSchema = z.object({
@@ -175,6 +177,7 @@ export const markdownCreateSchema = z.object({
   mode: z.enum(['new', 'open']),
   position: positionSchema,
 });
+export const agentHistorySchema = z.object({ a: terminalIdSchema, b: terminalIdSchema });
 export const codeFileSchema = z.object({ path: workspacePathSchema });
 export const codeWatchSchema = z.object({
   id: terminalIdSchema,
@@ -228,6 +231,9 @@ export const hookPayloadSchema = z.looseObject({
   tool_name: z.string().optional(),
   tool_input: z.record(z.string(), z.unknown()).optional(),
   tool_use_id: z.string().optional(),
+  tool_response: z.unknown().optional(),
+  /** Added by plancia-hook.cjs at SessionStart: the session's inbox (M8). */
+  plancia_messaging_socket: z.string().optional(),
   error: z.string().optional(),
   message: z.string().optional(),
   title: z.string().optional(),

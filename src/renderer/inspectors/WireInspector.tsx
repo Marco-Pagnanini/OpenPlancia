@@ -13,6 +13,7 @@ import { WIRE_COLORS, wireKind } from '../canvas/wireStyle';
 import { estimateTokens, useConnectionStore } from '../stores/connectionStore';
 import { useUiStore } from '../stores/uiStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { AgentInspector } from './AgentInspector';
 
 const VIA: Record<ConnectionUse['via'], string> = {
   manifest: 'nel contesto del messaggio',
@@ -32,8 +33,18 @@ function time(iso: string): string {
   });
 }
 
-/** Arrow inspector (spec §9): direction, access, reads and writes, last payload. */
+/** The inspector of the selected wire: agent ↔ agent (M8) or Claude ↔ panel. */
 export function WireInspector() {
+  const key = useUiStore((s) => s.wireKey);
+  return key?.startsWith('agents:') ? (
+    <AgentInspector key={key} wireKey={key} />
+  ) : (
+    <PanelWireInspector />
+  );
+}
+
+/** Arrow inspector (spec §9): direction, access, reads and writes, last payload. */
+function PanelWireInspector() {
   const key = useUiStore((s) => s.wireKey);
   const setWire = useUiStore((s) => s.setWire);
   const edge = useWorkspaceStore((s) => s.edges.find((e) => e.id === key));
@@ -42,7 +53,7 @@ export function WireInspector() {
   const lastUse = useConnectionStore((s) => (key ? s.lastUse[key] : undefined));
   const [history, setHistory] = useState<ConnectionUse[]>([]);
   const [copied, setCopied] = useState(false);
-  const pair = edge?.data?.pair;
+  const pair = edge?.type === 'wire' ? edge.data?.pair : undefined;
 
   useEffect(() => {
     if (key && !edge) setWire(null);

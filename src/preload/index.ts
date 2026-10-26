@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   IpcChannels,
+  type AgentMessage,
   type ArchitectureChangedEvent,
   type CodeFeedEntry,
   type ConnectionUse,
@@ -57,6 +58,10 @@ const api: PlanciaApi = {
       ipcRenderer.invoke(IpcChannels.markdownWrite, { id, content, baseVersion }),
     onChanged: (listener) => subscribe<MarkdownChangedEvent>(IpcChannels.markdownChanged, listener),
     undo: (id) => ipcRenderer.invoke(IpcChannels.markdownUndo, { id }),
+  },
+  agents: {
+    history: (a, b) => ipcRenderer.invoke(IpcChannels.agentHistory, { a, b }),
+    onMessage: (listener) => subscribe<AgentMessage>(IpcChannels.agentMessage, listener),
   },
   code: {
     feed: () => ipcRenderer.invoke(IpcChannels.codeFeed),

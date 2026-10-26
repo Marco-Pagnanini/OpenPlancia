@@ -34,6 +34,11 @@ export function toolLabel(
     const path = toolFilePath(input);
     return path ? `${name}: ${displayPath(path, root)}` : name;
   }
+  if (name === 'SendMessage') {
+    const to = str(input?.['to']) ?? str(input?.['recipient']);
+    const what = str(input?.['summary']) ?? str(input?.['message']);
+    return `SendMessage → ${to ?? '?'}${what ? `: ${oneLine(what, 70)}` : ''}`;
+  }
   const mcp = /^mcp__(.+?)__(.+)$/.exec(name);
   if (mcp) return `${mcp[1]} › ${mcp[2]}`;
   const arg =

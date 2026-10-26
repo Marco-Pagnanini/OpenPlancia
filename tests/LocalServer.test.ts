@@ -148,9 +148,17 @@ describe('LocalServer', () => {
 describe('plancia-hook.cjs', () => {
   const script = join(import.meta.dirname, '../resources/plancia-hook.cjs');
 
-  function run(url: string, input: string): Promise<{ code: number | null; out: string }> {
+  function run(
+    url: string,
+    input: string,
+    socket?: string,
+  ): Promise<{ code: number | null; out: string }> {
+    // The test may itself run inside a Claude session: never leak its inbox into the bridge.
+    const env = { ...process.env };
+    delete env['CLAUDE_CODE_MESSAGING_SOCKET'];
+    if (socket) env['CLAUDE_CODE_MESSAGING_SOCKET'] = socket;
     return new Promise((resolve) => {
-      const child = spawn(process.execPath, [script, url]);
+      const child = spawn(process.execPath, [script, url], { env });
       let out = '';
       child.stdout.on('data', (c: Buffer) => (out += c.toString()));
       child.on('close', (code) => resolve({ code, out }));
@@ -165,6 +173,14 @@ describe('plancia-hook.cjs', () => {
     expect(res.code).toBe(0);
     expect(JSON.parse(res.out)).toEqual(reply);
     expect(hooks).toEqual([['term-1', { hook_event_name: 'SessionStart' }]]);
+  });
+
+  it("adds the session's inbox address, so replies between agents can be told apart", async () => {
+    server.issueToken('term-1');
+    await run(server.url('hooks', 'term-1'), '{"hook_event_name":"SessionStart"}', '/tmp/s.sock');
+    expect(hooks).toEqual([
+      ['term-1', { hook_event_name: 'SessionStart', plancia_messaging_socket: '/tmp/s.sock' }],
+    ]);
   });
 
   it('exits 0 silently when OpenPlancia is not reachable', async () => {

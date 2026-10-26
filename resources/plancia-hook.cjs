@@ -2,6 +2,8 @@
 // Bridge for hook events that only support `type: "command"` (SessionStart):
 // reads the event JSON from stdin, POSTs it to OpenPlancia and prints the reply on stdout.
 // Always exits 0 so a OpenPlancia problem never blocks Claude Code.
+// It runs inside the Claude session, so it also tells OpenPlancia the session's inbox address
+// (CLAUDE_CODE_MESSAGING_SOCKET): replies between agents are addressed to it.
 'use strict';
 const http = require('node:http');
 
@@ -10,7 +12,17 @@ const chunks = [];
 process.stdin.on('data', (c) => chunks.push(c));
 process.stdin.on('end', () => {
   if (!url) process.exit(0);
-  const body = Buffer.concat(chunks);
+  let body = Buffer.concat(chunks);
+  const socket = process.env.CLAUDE_CODE_MESSAGING_SOCKET;
+  if (socket) {
+    try {
+      const event = JSON.parse(body.toString('utf8'));
+      event.plancia_messaging_socket = socket;
+      body = Buffer.from(JSON.stringify(event));
+    } catch {
+      // not JSON: forward it as it is
+    }
+  }
   const req = http.request(
     url,
     {

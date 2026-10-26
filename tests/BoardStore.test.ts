@@ -280,7 +280,6 @@ describe('connections', () => {
     const before = store.getBoard();
     for (const [source, target, message] of [
       ['md-0002', 'term-0001', 'Questo collegamento esiste già'],
-      ['term-0001', 'term-0004', 'Multi-agente: in arrivo'],
       ['md-0002', 'term-0003', 'Solo i terminali Claude si possono collegare'],
       ['md-0002', 'nope', 'Panel inesistente'],
     ] as const) {
