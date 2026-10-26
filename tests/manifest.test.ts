@@ -33,7 +33,7 @@ describe('renderManifest', () => {
       [
         'OpenPlancia — panel collegati a questa sessione:',
         '- md-3f2a "AGENTS.md" (markdown, file AGENTS.md) · accesso: lettura · versione 7',
-        '- arch-91c0 "Backend v1" (architecture) · accesso: lettura e scrittura · versione 3',
+        '- arch-91c0 "Backend v1" (architecture, JSON ArchitectureDoc) · accesso: lettura e scrittura · versione 3',
         'I contenuti si leggono con mcp__plancia__read_panel e si modificano con mcp__plancia__write_panel.',
         '',
         'Contenuti non inclusi qui, disponibili via mcp__plancia__read_panel: "Backend v1" (versione 3).',
@@ -43,6 +43,12 @@ describe('renderManifest', () => {
         '- usa sempre pnpm',
       ].join('\n'),
     );
+  });
+
+  it('inlines an architecture as the JSON Claude receives', () => {
+    const json = '{"schemaVersion":1,"title":"Backend v1",\n"nodes":[],\n"edges":[]}';
+    const text = renderManifest([{ ...backend, content: json }]);
+    expect(text).toContain(`=== Backend v1 (versione 3) ===\n${json}`);
   });
 
   it('never inlines write-only panels', () => {

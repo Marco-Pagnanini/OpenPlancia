@@ -24,7 +24,11 @@ const TOOLS_LINE =
   'I contenuti si leggono con mcp__plancia__read_panel e si modificano con mcp__plancia__write_panel.';
 
 function describePanel(entry: ManifestEntry): string {
-  const kind = entry.filePath ? `${entry.type}, file ${entry.filePath}` : entry.type;
+  const kind = entry.filePath
+    ? `${entry.type}, file ${entry.filePath}`
+    : entry.type === 'architecture'
+      ? 'architecture, JSON ArchitectureDoc'
+      : entry.type;
   return `- ${entry.id} "${entry.title}" (${kind}) · accesso: ${accessLabel(entry.access)} · versione ${entry.version}`;
 }
 

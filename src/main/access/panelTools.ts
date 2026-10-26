@@ -1,5 +1,8 @@
+import { z } from 'zod';
 import { accessLabel } from '@shared/access';
+import { architectureDocSchema, formatArchitectureForClaude } from '@shared/architecture';
 import type { Panel } from '@shared/types';
+import type { ArchitectureService } from '../architecture/ArchitectureService';
 import type { MarkdownService } from '../files/MarkdownService';
 import { deniedMessage, type AccessService } from './AccessService';
 import type { ConnectionLog } from './ConnectionLog';
@@ -11,12 +14,16 @@ export type ToolResult =
 export interface PanelToolsDeps {
   access: AccessService;
   markdown: MarkdownService;
+  architecture: Pick<ArchitectureService, 'read' | 'write'>;
   log: ConnectionLog;
   panel(id: string): Panel | undefined;
 }
 
-const NOT_YET =
-  'I panel Architettura saranno leggibili e scrivibili da Claude con la prossima versione di OpenPlancia.';
+const SCHEMA_HINT = 'Lo schema completo si ottiene con mcp__plancia__get_panel_schema.';
+
+function failure(err: unknown): ToolResult {
+  return { ok: false, error: err instanceof Error ? err.message : String(err) };
+}
 
 /** Implementation of the plancia MCP tools (spec §7.3). Every call checks the arrows anew. */
 export class PanelTools {
@@ -55,12 +62,13 @@ export class PanelTools {
     const found = this.linked(terminalId, panelId, 'read');
     if ('error' in found) return { ok: false, error: found.error };
     const { panel } = found;
-    if (panel.type !== 'markdown') return { ok: false, error: NOT_YET };
+    if (panel.type === 'architecture') return this.readArchitecture(terminalId, panel);
+    if (panel.type !== 'markdown') return failure(new Error(`Panel non leggibile: ${panelId}`));
     let doc;
     try {
       doc = await this.deps.markdown.read(panel.id);
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return failure(err);
     }
     this.deps.log.record({
       terminalId,
@@ -94,7 +102,16 @@ export class PanelTools {
     const found = this.linked(terminalId, panelId, 'write');
     if ('error' in found) return { ok: false, error: found.error };
     const { panel } = found;
-    if (panel.type !== 'markdown') return { ok: false, error: NOT_YET };
+    if (panel.type === 'architecture') {
+      if (mode === 'append') {
+        return {
+          ok: false,
+          error: `mode "append" vale solo per i markdown: per un'architettura "content" è l'ArchitectureDoc completo. ${SCHEMA_HINT}`,
+        };
+      }
+      return this.writeArchitecture(terminalId, panel, baseVersion, content);
+    }
+    if (panel.type !== 'markdown') return failure(new Error(`Panel non scrivibile: ${panelId}`));
     if (typeof content !== 'string') {
       return { ok: false, error: `Per un panel markdown "content" deve essere testo (string).` };
     }
@@ -128,6 +145,84 @@ export class PanelTools {
       ok: true,
       text: `Scritto '${panel.title}' (${panel.filePath}): versione ${baseVersion} → ${result.version}.`,
       data: { panelId, version: result.version },
+    };
+  }
+
+  private async readArchitecture(terminalId: string, panel: Panel): Promise<ToolResult> {
+    let state;
+    try {
+      state = await this.deps.architecture.read(panel.id);
+    } catch (err) {
+      return failure(err);
+    }
+    const json = formatArchitectureForClaude(state.doc);
+    this.deps.log.record({
+      terminalId,
+      panelId: panel.id,
+      kind: 'read',
+      via: 'read_panel',
+      version: state.version,
+      payload: json,
+    });
+    return {
+      ok: true,
+      text: `${panel.title} · architettura (ArchitectureDoc) · versione ${state.version}\n\n${json}`,
+      data: { panelId: panel.id, type: panel.type, version: state.version, content: state.doc },
+    };
+  }
+
+  private async writeArchitecture(
+    terminalId: string,
+    panel: Panel,
+    baseVersion: number,
+    content: unknown,
+  ): Promise<ToolResult> {
+    const result = await this.deps.architecture.write(panel.id, content, baseVersion, terminalId);
+    if (!result.ok) {
+      if (result.code === 'conflict') {
+        return {
+          ok: false,
+          error: `Conflitto di versione: il panel '${panel.title}' è alla versione ${result.state.version}, la scrittura partiva dalla ${baseVersion}. Rileggi con mcp__plancia__read_panel e riprova.`,
+        };
+      }
+      return {
+        ok: false,
+        error:
+          result.code === 'invalid'
+            ? `ArchitectureDoc non valido, nulla è stato scritto:\n${result.message}\n${SCHEMA_HINT}`
+            : result.message,
+      };
+    }
+    this.deps.log.record({
+      terminalId,
+      panelId: panel.id,
+      kind: 'write',
+      via: 'write_panel',
+      version: result.version,
+      payload: formatArchitectureForClaude(result.doc),
+    });
+    return {
+      ok: true,
+      text: `Scritto '${panel.title}': versione ${baseVersion} → ${result.version} (${result.doc.nodes.length} nodi, ${result.doc.edges.length} relazioni). I nodi nuovi sono stati posizionati automaticamente.`,
+      data: { panelId: panel.id, version: result.version },
+    };
+  }
+
+  /** JSON Schema of a panel type's content (spec §7.3). */
+  panelSchema(type: string): ToolResult {
+    if (type !== 'architecture') {
+      return {
+        ok: false,
+        error: `Schema disponibile solo per "architecture"; i markdown sono testo libero.`,
+      };
+    }
+    const schema = z.toJSONSchema(architectureDocSchema, { io: 'input' });
+    const rules =
+      'Regole oltre allo schema: id dei nodi e delle relazioni unici; "from" e "to" devono essere id di nodi esistenti; "position" si può omettere (i nodi nuovi vengono posizionati automaticamente, quelli esistenti restano dove sono).';
+    return {
+      ok: true,
+      text: `${JSON.stringify(schema)}\n\n${rules}`,
+      data: { type, schema },
     };
   }
 }

@@ -14,6 +14,7 @@ import { useCallback, useState } from 'react';
 import { checkConnection } from '@shared/access';
 import { InfoToast } from '../components/InfoToast';
 import { ActivityPanel } from '../inspectors/ActivityPanel';
+import { ArchJsonModal } from '../inspectors/ArchJsonModal';
 import { ManifestModal } from '../inspectors/ManifestModal';
 import { WireInspector } from '../inspectors/WireInspector';
 import { PanelNodeComponent } from '../panels/PanelNode';
@@ -173,6 +174,7 @@ export function Canvas() {
       <InfoToast />
       <FocusOverlay />
       <ManifestModal />
+      <ArchJsonModal />
     </div>
   );
 }

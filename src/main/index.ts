@@ -9,7 +9,9 @@ import {
   type MarkdownCreateResult,
   type OpenWorkspaceResult,
 } from '@shared/ipc';
+import { formatArchitectureForClaude } from '@shared/architecture';
 import {
+  architectureWriteSchema,
   connectionHistorySchema,
   externalUrlSchema,
   markdownCreateSchema,
@@ -26,6 +28,7 @@ import { AccessService } from './access/AccessService';
 import { ConnectionLog } from './access/ConnectionLog';
 import { PanelTools } from './access/panelTools';
 import { ActivityLog } from './activity/ActivityLog';
+import { ArchitectureService } from './architecture/ArchitectureService';
 import { collectManifestEntries, ManifestTracker, renderManifest } from './claude/manifest';
 import {
   CLAUDE_INSTALL_URL,
@@ -89,7 +92,10 @@ const workspace = new WorkspaceService({
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitle(windowTitle(snapshot));
     send(IpcChannels.workspaceState, snapshot);
     // A different folder was opened: watch its markdown files.
-    if (snapshot && snapshot.root !== openRoot) void markdown.sync();
+    if (snapshot && snapshot.root !== openRoot) {
+      void markdown.sync();
+      architecture.sync(snapshot.board.panels);
+    }
     openRoot = snapshot?.root ?? null;
   },
 });
@@ -114,6 +120,11 @@ const markdown: MarkdownService = new MarkdownService({
   },
 });
 
+const architecture: ArchitectureService = new ArchitectureService({
+  workspace,
+  onChange: (event) => send(IpcChannels.architectureChanged, event),
+});
+
 const connectionLog = new ConnectionLog((use) => send(IpcChannels.connectionUsed, use));
 const accessService = new AccessService({
   panels: () => workspace.panels(),
@@ -124,6 +135,7 @@ const accessService = new AccessService({
 const panelTools = new PanelTools({
   access: accessService,
   markdown,
+  architecture,
   log: connectionLog,
   panel: (id) => workspace.getPanel(id),
 });
@@ -134,8 +146,13 @@ function manifestEntries(terminalId: string) {
     terminalId,
     workspace.panels(),
     workspace.connections(),
-    async (panel) =>
-      panel.type === 'markdown' ? (await markdown.read(panel.id)).content : undefined,
+    async (panel) => {
+      if (panel.type === 'markdown') return (await markdown.read(panel.id)).content;
+      if (panel.type === 'architecture') {
+        return formatArchitectureForClaude((await architecture.read(panel.id)).doc);
+      }
+      return undefined;
+    },
   );
 }
 
@@ -217,6 +234,7 @@ const server = new LocalServer({
       readPanel: (id, panelId) => panelTools.readPanel(id, panelId),
       writePanel: (id, panelId, baseVersion, content, mode) =>
         panelTools.writePanel(id, panelId, baseVersion, content, mode),
+      panelSchema: (type) => panelTools.panelSchema(type),
       // The tool call itself shows up in the timeline through PreToolUse/PostToolUse.
       onToolCall: () => undefined,
     }),
@@ -267,8 +285,10 @@ workspace.onChange((change) => {
 workspace.onBeforeClose(() => {
   activity.reset();
   markdown.reset();
+  architecture.reset();
   connectionLog.reset();
 });
+workspace.onChange((change, panels) => void architecture.boardChanged(change, panels));
 workspace.onChange((change) => {
   if (
     change.type === 'createPanel' ||
@@ -499,6 +519,22 @@ function registerIpc(): void {
     const parsed = panelIdPayloadSchema.safeParse(payload);
     if (!parsed.success) return { ok: false, message: 'Richiesta non valida' } as const;
     return markdown.undo(parsed.data.id);
+  });
+  ipcMain.handle(IpcChannels.architectureRead, (_event, payload: unknown) => {
+    const parsed = panelIdPayloadSchema.parse(payload);
+    return architecture.read(parsed.id);
+  });
+  ipcMain.handle(IpcChannels.architectureWrite, (_event, payload: unknown) => {
+    const parsed = architectureWriteSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { ok: false, code: 'error', message: 'Richiesta non valida' } as const;
+    }
+    return architecture.write(parsed.data.id, parsed.data.doc, parsed.data.baseVersion);
+  });
+  ipcMain.handle(IpcChannels.architectureUndo, (_event, payload: unknown) => {
+    const parsed = panelIdPayloadSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, message: 'Richiesta non valida' } as const;
+    return architecture.undo(parsed.data.id);
   });
   ipcMain.handle(IpcChannels.connectionHistory, (_event, payload: unknown) => {
     const parsed = connectionHistorySchema.safeParse(payload);

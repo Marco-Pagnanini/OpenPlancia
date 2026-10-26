@@ -16,6 +16,7 @@ import { PanelIcon } from './PanelIcon';
 import { PanelPlaceholder } from './PanelPlaceholder';
 import { Ports } from './Ports';
 import { confirmDelete, panelKindLabel } from './panelMeta';
+import { ArchitectureBody } from './architecture/ArchitectureBody';
 import { MarkdownBody } from './markdown/MarkdownBody';
 import { StatusBadge } from './StatusBadge';
 import { TerminalBody } from './terminal/TerminalBody';
@@ -167,6 +168,7 @@ export function PanelContent({ panel, variant }: { panel: Panel; variant: 'panel
     );
   }
   if (panel.type === 'markdown') return <MarkdownBody panel={panel} variant={variant} />;
+  if (panel.type === 'architecture') return <ArchitectureBody panel={panel} variant={variant} />;
   return <PanelPlaceholder panel={panel} />;
 }
 

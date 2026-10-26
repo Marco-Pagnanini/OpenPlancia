@@ -55,7 +55,7 @@ Tutto in **TypeScript strict**, un solo linguaggio tra main e renderer.
 | Editor codice/markdown | Monaco (`@monaco-editor/react`), anche `DiffEditor` |
 | Preview markdown | `react-markdown` + `remark-gfm` |
 | Layout automatico nodi architettura | `@dagrejs/dagre` |
-| Validazione | `zod` (+ `zod-to-json-schema` per esporre lo schema a Claude) |
+| Validazione | `zod` (`z.toJSONSchema` per esporre lo schema a Claude) |
 | Server MCP | `@modelcontextprotocol/sdk`, trasporto Streamable HTTP |
 | File watching | `chokidar` |
 | Test | vitest (+ Testing Library per i componenti critici) |
@@ -333,7 +333,7 @@ Un server MCP per tutti i terminali; il terminale chiamante si ricava da `:termi
 | `list_panels` | — | Elenca i panel collegati a questo terminale: `id`, `type`, `title`, `access`, `version`, `updatedAt`, e `filePath` per i markdown. |
 | `read_panel` | `{ panelId }` | Richiede `access.read`. Markdown: testo del file. Architettura: `ArchitectureDoc` senza posizioni. Restituisce anche `version`. |
 | `write_panel` | `{ panelId, baseVersion, content, mode? }` | Richiede `access.write`. Markdown: `mode` = `"replace"` (default) o `"append"`, `content` = testo. Architettura: `content` = `ArchitectureDoc`, validato con zod; se non valido restituisce gli errori in modo leggibile. Se `baseVersion` ≠ versione corrente → errore di conflitto con la versione attuale, così Claude rilegge e riprova. |
-| `get_panel_schema` | `{ type: "architecture" }` | JSON Schema dell'`ArchitectureDoc` (da `zod-to-json-schema`). |
+| `get_panel_schema` | `{ type: "architecture" }` | JSON Schema dell'`ArchitectureDoc` (da `z.toJSONSchema` di zod 4). |
 
 Errori sempre espliciti e utili, ad esempio:
 `"Accesso negato: il panel 'AGENTS.md' è collegato a questo terminale in sola lettura. L'utente deve aggiungere una freccia Terminale → Panel per consentire la scrittura."`
@@ -524,7 +524,7 @@ plancia/
 | M3 Server locale e hook | fatto | Server su 127.0.0.1 (porta casuale, token di 32 byte nel path, controllo di Host e Origin). Hook http + bridge `command` per SessionStart, MCP `plancia` stateless con `list_panels`. Verificati con Claude Code 2.1.310: badge `al lavoro` con il tool corrente → `in attesa`, `richiede input` sul permesso di Write, timeline in Attività, `list_panels` chiamato senza prompt. |
 | M4 Markdown | fatto | Monaco 0.57 (locale, lazy) + react-markdown/GFM, chokidar 5, versioni per panel, autosalvataggio 500 ms, conflitti. Verificati: modifica esterna di `AGENTS.md` → il panel si aggiorna; modifica nel panel → il file si aggiorna; conflitto con bozza non salvata. |
 | M5 Connessioni | fatto | Scenario di accettazione superato con Claude Code 2.1.310: (1) Markdown → Claude: alla domanda sulle regole Claude cita pnpm senza che il file venga nominato; (2) richiesta di scrittura in sola lettura: `write_panel` rifiutato, Claude lo spiega, file intatto; (3) con la freccia Claude → Markdown il file si aggiorna, il panel lampeggia, il filo diventa viola e si anima, "Annulla" ripristina; (4) tolte le frecce, al messaggio dopo Claude dice di non avere più panel collegati. |
-| M6 Architettura | da fare | |
+| M6 Architettura | fatto | `ArchitectureDoc` con zod (controlli incrociati, errori leggibili), dagre 3.1 per i nodi nuovi, anteprima SVG, editor React Flow in modalità focus, "Vedi JSON", `get_panel_schema`. Scenario di accettazione superato con Claude Code 2.1.310: disegnati client, API, 3 servizi e Postgres e collegato in lettura, Claude ha creato una cartella per ogni servizio con gli id e le relazioni del diagramma; con la freccia in scrittura, "aggiungi una coda tra API e worker" ha aggiunto il nodo `coda` e le due relazioni senza spostare i nodi esistenti (panel lampeggiante, "Annulla" funzionante); una relazione verso un nodo inesistente è stata rifiutata con `to: il nodo "fantasma" non esiste → at edges[8].to`, versione invariata. |
 | M7 Codice | da fare | |
 
 ---
@@ -577,3 +577,10 @@ plancia/
 - [x] **Verifica automatica e finestra nascosta**: quando la finestra di Electron è coperta, Chromium non disegna (`visibilityState: hidden`), React Flow non misura le porte (niente fili) e gli eventi di input via DevTools restano in attesa. Non è un difetto dell'app, ma i test automatici dell'interfaccia vanno fatti a finestra visibile. Da controllare a mano: il toast "Claude vedrà questo collegamento al prossimo messaggio" dopo un trascinamento riuscito (non osservato nell'unica prova a finestra visibile; il codice e il toast di rifiuto funzionano).
 - [x] **Nome: OpenPlancia** (dopo M5): l'app, il pacchetto (`openplancia`), il titolo e i testi si chiamano OpenPlancia. Restano invariati gli identificatori interni: la cartella `.plancia/` nei progetti (le lavagne esistenti continuano ad aprirsi), il server MCP `plancia` (tool `mcp__plancia__*`), i canali IPC `plancia:*`. Al primo avvio le impostazioni del vecchio profilo `plancia` vengono copiate nel nuovo.
 - [x] **Schermata iniziale** (dopo M5): clic sul logo = chiude la lavagna (con conferma se ci sono terminali in esecuzione, che vengono chiusi) e torna alla schermata iniziale, che elenca le cartelle recenti (ultime 8). Tornare alla home fa dimenticare l'"ultima cartella": al riavvio si parte dalla home.
+- [x] **JSON Schema senza `zod-to-json-schema`** (M6): zod 4 ha `z.toJSONSchema`; `get_panel_schema` lo usa (con `io: "input"`) e aggiunge in testo le regole che lo schema non esprime (id unici, relazioni verso nodi esistenti).
+- [x] **Formato del documento per Claude** (M6): JSON valido senza posizioni, un nodo o una relazione per riga (`formatArchitectureForClaude`). Sul diagramma della demo: 874 caratteri contro 1.729 del file su disco (indentato, con posizioni). "Vedi JSON" mostra esattamente questo testo.
+- [x] **Scritture di Claude sulle architetture** (M6): si riscrive sempre il documento completo; `content` può essere un oggetto o una stringa JSON; `mode: "append"` è rifiutato. Le posizioni mandate da Claude per nodi già esistenti vengono ignorate (restano quelle dell'utente); i nodi nuovi senza posizione sono piazzati con dagre (sinistra → destra) rispetto ai vicini e spostati in basso finché non si sovrappongono.
+- [x] **Vita del file `.arch.json`** (M6): creato vuoto con il panel (sovrascrivendo eventuali avanzi con lo stesso id), copiato con "Duplica", cancellato con il panel. Per questo eliminare un'architettura non vuota chiede conferma. Le modifiche fatte a mano al file con l'app aperta non vengono osservate (il file è dati dell'app, non del progetto).
+- [x] **Id dei nodi** (M6): un nodo aggiunto dall'editor prende un id provvisorio dal tipo (`servizio-2`); quando lo si nomina, l'id diventa lo slug del nome, ma solo finché nessuna relazione lo usa. Dopo resta stabile, perché è il riferimento che Claude usa tra una versione e l'altra.
+- [x] **Collegare nodi nell'editor** (M6): oltre al rilascio su un pallino (raggio di React Flow), vale il rilascio sul corpo del nodo (`onConnectEnd` + `elementFromPoint`). Il canvas dell'editor sta dentro `.nokey`, quindi Canc/Backspace sono gestiti dall'editor stesso.
+- [ ] Possibili miglioramenti dopo l'MVP: pulsante "Riordina" (dagre su tutto il diagramma), unione tra modifiche locali non ancora salvate e scrittura di Claude (oggi vince Claude e compare un avviso).

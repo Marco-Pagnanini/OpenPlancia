@@ -17,6 +17,8 @@ interface UiState {
   wireKey: string | null;
   /** Terminal whose manifest is shown in "Cosa vede Claude". */
   manifestFor: string | null;
+  /** Architecture panel whose JSON is shown ("Vedi JSON"). */
+  archJsonFor: string | null;
   /** The "Markdown" tool menu (new / open file) is open. */
   markdownMenu: boolean;
   toast: Toast | null;
@@ -27,6 +29,7 @@ interface UiState {
   setActivity(id: string | null): void;
   setWire(key: string | null): void;
   setManifestFor(id: string | null): void;
+  setArchJsonFor(id: string | null): void;
   showToast(message: string): void;
   hideToast(id: number): void;
 }
@@ -41,6 +44,7 @@ export const useUiStore = create<UiState>()((set) => ({
   activityId: null,
   wireKey: null,
   manifestFor: null,
+  archJsonFor: null,
   markdownMenu: false,
   toast: null,
   setTool: (tool) => set({ tool }),
@@ -49,6 +53,7 @@ export const useUiStore = create<UiState>()((set) => ({
   setActivity: (activityId) => set(activityId ? { activityId, wireKey: null } : { activityId }),
   setWire: (wireKey) => set(wireKey ? { wireKey, activityId: null } : { wireKey }),
   setManifestFor: (manifestFor) => set({ manifestFor }),
+  setArchJsonFor: (archJsonFor) => set({ archJsonFor }),
   showToast: (message) => {
     const id = ++toastSeq;
     set({ toast: { id, message } });
