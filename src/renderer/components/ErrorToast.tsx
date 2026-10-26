@@ -1,3 +1,4 @@
+import { WarningIcon, XIcon } from '@phosphor-icons/react';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 
 export function ErrorToast() {
@@ -7,16 +8,17 @@ export function ErrorToast() {
   return (
     <div
       role="alert"
-      className="fixed right-4 bottom-4 z-50 flex max-w-md items-start gap-3 rounded-lg border border-red-900 bg-red-950/95 p-3 text-sm text-red-200 shadow-xl"
+      className="fixed top-16 right-4 z-50 flex max-w-md items-start gap-2.5 rounded-xl border border-accent/60 bg-chrome p-3 text-[12.5px] text-ink-2 shadow-[0_24px_60px_rgba(0,0,0,.55)]"
     >
+      <WarningIcon size={16} className="mt-px shrink-0 text-danger" />
       <pre className="min-w-0 flex-1 font-sans whitespace-pre-wrap">{error}</pre>
       <button
         type="button"
         onClick={clear}
         aria-label="Chiudi"
-        className="text-red-300 hover:text-white"
+        className="grid size-6 shrink-0 place-items-center rounded-md text-ink-4 hover:bg-line-soft hover:text-ink"
       >
-        ✕
+        <XIcon size={13} />
       </button>
     </div>
   );

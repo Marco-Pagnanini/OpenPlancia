@@ -1,7 +1,6 @@
 import {
   Background,
   BackgroundVariant,
-  Controls,
   MiniMap,
   ReactFlow,
   type NodeTypes,
@@ -9,11 +8,26 @@ import {
 } from '@xyflow/react';
 import { useCallback, useState } from 'react';
 import { PanelNodeComponent } from '../panels/PanelNode';
+import { useUiStore } from '../stores/uiStore';
 import { useWorkspaceStore, type PanelNode } from '../stores/workspaceStore';
-import { Toolbar } from './Toolbar';
+import { TOOL_HINTS } from './tools';
+import { ToolRail } from './ToolRail';
+import { TopBar } from './TopBar';
+import { useShortcuts } from './useShortcuts';
+import { ZoomControls } from './ZoomControls';
 
 const nodeTypes: NodeTypes = { panel: PanelNodeComponent };
 const DELETE_KEYS = ['Backspace', 'Delete'];
+
+function Hint() {
+  const hint = useUiStore((s) => TOOL_HINTS[s.tool]);
+  if (!hint) return null;
+  return (
+    <div className="pointer-events-none absolute bottom-[18px] left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-chrome px-3.5 py-2 text-[12.5px] whitespace-nowrap text-ink-2">
+      {hint}
+    </div>
+  );
+}
 
 export function Canvas() {
   // Only the viewport saved at open time matters: afterwards React Flow owns it.
@@ -21,6 +35,8 @@ export function Canvas() {
   const nodes = useWorkspaceStore((s) => s.nodes);
   const applyChanges = useWorkspaceStore((s) => s.applyNodeChanges);
   const dispatch = useWorkspaceStore((s) => s.dispatch);
+  const hand = useUiStore((s) => s.tool === 'hand');
+  useShortcuts();
 
   const onNodeDragStop: OnNodeDrag<PanelNode> = useCallback(
     (_event, _node, dragged) => {
@@ -42,26 +58,48 @@ export function Canvas() {
   );
 
   return (
-    <ReactFlow<PanelNode>
-      nodes={nodes}
-      edges={[]}
-      nodeTypes={nodeTypes}
-      onNodesChange={applyChanges}
-      onNodeDragStop={onNodeDragStop}
-      onNodesDelete={onNodesDelete}
-      onMoveEnd={(_event, viewport) => void dispatch({ type: 'setViewport', viewport })}
-      {...(initialViewport ? { defaultViewport: initialViewport } : { fitView: true })}
-      fitViewOptions={{ maxZoom: 1 }}
-      minZoom={0.1}
-      maxZoom={2}
-      deleteKeyCode={DELETE_KEYS}
-      nodesConnectable={false}
-      colorMode="dark"
-    >
-      <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#3f3f46" />
-      <MiniMap pannable zoomable nodeColor="#3f3f46" maskColor="rgb(9 9 11 / 0.7)" />
-      <Controls showInteractive={false} />
-      <Toolbar />
-    </ReactFlow>
+    <div className={`relative h-full w-full ${hand ? '[&_.react-flow__pane]:cursor-grab' : ''}`}>
+      <ReactFlow<PanelNode>
+        nodes={nodes}
+        edges={[]}
+        nodeTypes={nodeTypes}
+        onNodesChange={applyChanges}
+        onNodeDragStop={onNodeDragStop}
+        onNodesDelete={onNodesDelete}
+        onMoveEnd={(_event, viewport) => void dispatch({ type: 'setViewport', viewport })}
+        {...(initialViewport ? { defaultViewport: initialViewport } : { fitView: true })}
+        fitViewOptions={{ maxZoom: 1 }}
+        minZoom={0.1}
+        maxZoom={2}
+        // Wheel and two-finger scroll pan; pinch or Ctrl + wheel zooms (as in the design).
+        panOnScroll
+        zoomOnPinch
+        nodesDraggable={!hand}
+        elementsSelectable={!hand}
+        deleteKeyCode={DELETE_KEYS}
+        nodesConnectable={false}
+        colorMode="dark"
+        attributionPosition="bottom-left"
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1.2}
+          color="var(--color-line-strong)"
+        />
+        <MiniMap
+          pannable
+          zoomable
+          position="bottom-right"
+          nodeBorderRadius={4}
+          className="!mr-4 !mb-[64px] overflow-hidden rounded-[10px] border border-line"
+          style={{ width: 180, height: 120 }}
+        />
+      </ReactFlow>
+      <TopBar />
+      <ToolRail />
+      <ZoomControls />
+      <Hint />
+    </div>
   );
 }

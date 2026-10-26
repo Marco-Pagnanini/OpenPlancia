@@ -1,65 +1,64 @@
+import { DotsThreeIcon, XIcon } from '@phosphor-icons/react';
 import { memo, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import { NodeResizer, type NodeProps } from '@xyflow/react';
 import { MIN_PANEL_SIZE } from '@shared/panels';
+import type { Panel } from '@shared/types';
+import { useUiStore } from '../stores/uiStore';
 import { PANEL_DRAG_HANDLE, useWorkspaceStore, type PanelNode } from '../stores/workspaceStore';
 import { PanelIcon } from './PanelIcon';
 import { PanelPlaceholder } from './PanelPlaceholder';
+import { STATUS_LABEL, panelKindLabel } from './panelMeta';
 
-function PanelMenu({ onRename, id }: { onRename: () => void; id: string }) {
+const ICON_BUTTON =
+  'nodrag grid size-6 place-items-center rounded-md text-ink-5 hover:bg-line-soft hover:text-ink';
+
+function PanelMenu({ id, onRename }: { id: string; onRename: () => void }) {
   const dispatch = useWorkspaceStore((s) => s.dispatch);
   const [open, setOpen] = useState(false);
 
   const close = (e: FocusEvent<HTMLDivElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
   };
-  const item = 'block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-700';
+  const run = (action: () => void) => () => {
+    setOpen(false);
+    action();
+  };
+  const base = 'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px]';
+  const item = `${base} text-ink-2 hover:bg-hover hover:text-ink`;
 
   return (
-    <div className="nodrag relative" onBlur={close}>
+    <div className="relative" onBlur={close}>
       <button
         type="button"
         aria-label="Menu del panel"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="rounded px-1.5 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
+        className={ICON_BUTTON}
       >
-        ⋯
+        <DotsThreeIcon size={15} weight="bold" />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute top-6 right-0 z-10 w-36 overflow-hidden rounded-md border border-zinc-700 bg-zinc-800 py-1 shadow-lg"
+          className="nodrag absolute top-7 right-0 z-10 w-40 rounded-[10px] border border-line-strong bg-chrome p-1 shadow-[0_24px_60px_rgba(0,0,0,.55)]"
         >
-          <button
-            type="button"
-            role="menuitem"
-            className={item}
-            onClick={() => {
-              setOpen(false);
-              onRename();
-            }}
-          >
+          <button type="button" role="menuitem" className={item} onClick={run(onRename)}>
             Rinomina
           </button>
           <button
             type="button"
             role="menuitem"
             className={item}
-            onClick={() => {
-              setOpen(false);
-              void dispatch({ type: 'duplicatePanel', id });
-            }}
+            onClick={run(() => void dispatch({ type: 'duplicatePanel', id }))}
           >
             Duplica
           </button>
+          <div className="mx-1 my-1 h-px bg-line-soft" />
           <button
             type="button"
             role="menuitem"
-            className={`${item} text-red-400`}
-            onClick={() => {
-              setOpen(false);
-              void dispatch({ type: 'deletePanels', ids: [id] });
-            }}
+            className={`${base} text-danger hover:bg-accent/12`}
+            onClick={run(() => void dispatch({ type: 'deletePanels', ids: [id] }))}
           >
             Elimina
           </button>
@@ -83,14 +82,30 @@ function TitleEditor({ title, onDone }: { title: string; onDone: (next: string |
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={onKeyDown}
       onBlur={() => onDone(value)}
-      className="nodrag min-w-0 flex-1 rounded bg-zinc-800 px-1 text-sm text-zinc-100 outline-none ring-1 ring-blue-500"
+      className="nodrag min-w-0 flex-1 rounded-md bg-canvas px-1.5 py-0.5 font-mono text-[12.5px] text-ink outline-none ring-1 ring-accent"
     />
+  );
+}
+
+function StatusBadge({ panel }: { panel: Panel }) {
+  if (panel.type !== 'terminal') return null;
+  const live = panel.status === 'working';
+  return (
+    <span
+      className={`flex shrink-0 items-center gap-1.5 rounded-full px-[9px] py-[3px] text-[11px] whitespace-nowrap ${
+        live ? 'bg-accent/13 text-accent-soft' : 'bg-hover text-ink-3'
+      }`}
+    >
+      {live && <span className="size-1.5 animate-pulse-dot rounded-full bg-accent" />}
+      {STATUS_LABEL[panel.status]}
+    </span>
   );
 }
 
 function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
   const { panel } = data;
   const dispatch = useWorkspaceStore((s) => s.dispatch);
+  const hand = useUiStore((s) => s.tool === 'hand');
   const [renaming, setRenaming] = useState(false);
 
   const finishRename = (next: string | null) => {
@@ -101,15 +116,24 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
 
   return (
     <div
-      className={`flex h-full w-full flex-col overflow-hidden rounded-lg border bg-zinc-900 shadow-xl shadow-black/40 ${
-        selected ? 'border-blue-500' : 'border-zinc-700'
+      className={`flex h-full w-full flex-col rounded-xl border bg-panel ${
+        selected
+          ? 'border-accent shadow-[0_0_0_1px_var(--color-accent),0_20px_50px_rgba(0,0,0,.5)]'
+          : 'border-line shadow-[0_14px_40px_rgba(0,0,0,.4)]'
       }`}
     >
       <NodeResizer
-        isVisible={selected}
+        isVisible={selected && !hand}
         minWidth={MIN_PANEL_SIZE.width}
         minHeight={MIN_PANEL_SIZE.height}
-        color="#3b82f6"
+        lineStyle={{ borderColor: 'transparent' }}
+        handleStyle={{
+          width: 8,
+          height: 8,
+          borderRadius: 2,
+          background: 'var(--color-ink)',
+          border: '1.5px solid var(--color-accent)',
+        }}
         onResizeEnd={(_event, p) =>
           void dispatch({
             type: 'resizePanel',
@@ -120,19 +144,45 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
         }
       />
       <header
-        className={`${PANEL_DRAG_HANDLE} flex h-9 shrink-0 cursor-grab items-center gap-2 border-b border-zinc-800 bg-zinc-900/80 px-2 active:cursor-grabbing`}
+        className={`${PANEL_DRAG_HANDLE} flex h-9 shrink-0 items-center gap-2 rounded-t-[11px] border-b border-line-soft bg-panel-head pr-2 pl-3 ${
+          hand ? '' : 'cursor-grab active:cursor-grabbing'
+        }`}
       >
-        <PanelIcon type={panel.type} mode={panel.type === 'terminal' ? panel.mode : undefined} />
+        <PanelIcon
+          type={panel.type}
+          mode={panel.type === 'terminal' ? panel.mode : undefined}
+          className="text-ink-3"
+        />
         {renaming ? (
           <TitleEditor title={panel.title} onDone={finishRename} />
         ) : (
-          <span className="min-w-0 flex-1 truncate text-sm text-zinc-200" title={panel.title}>
-            {panel.title}
-          </span>
+          <>
+            <span
+              className="min-w-0 truncate font-mono text-[12.5px] font-medium text-ink"
+              title={panel.title}
+            >
+              {panel.title}
+            </span>
+            <span className="shrink-0 text-[11px] text-ink-4">{panelKindLabel(panel)}</span>
+            <div className="flex-1" />
+          </>
         )}
+        <StatusBadge panel={panel} />
         <PanelMenu id={id} onRename={() => setRenaming(true)} />
+        <button
+          type="button"
+          aria-label="Chiudi panel"
+          title="Chiudi panel"
+          onClick={() => void dispatch({ type: 'deletePanels', ids: [id] })}
+          className={ICON_BUTTON}
+        >
+          <XIcon size={13} />
+        </button>
       </header>
-      <div className="nodrag nowheel nopan min-h-0 flex-1 overflow-auto p-3">
+      {/* In hand mode the body must let the pan gesture through. */}
+      <div
+        className={`${hand ? '' : 'nodrag nowheel nopan'} min-h-0 flex-1 overflow-auto rounded-b-[11px]`}
+      >
         <PanelPlaceholder panel={panel} />
       </div>
     </div>

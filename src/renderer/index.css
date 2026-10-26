@@ -1,7 +1,89 @@
 @import 'tailwindcss';
 
+/* Design tokens from the Plancia design (warm dark, orange accent). */
+@theme {
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+
+  --color-canvas: #111110;
+  --color-panel: #181817;
+  --color-panel-head: #1c1c1a;
+  --color-chrome: #1a1a19;
+  --color-raised: #222220;
+  --color-hover: #242422;
+  --color-hover-strong: #262624;
+  --color-line: #2c2c29;
+  --color-line-soft: #2a2a27;
+  --color-line-strong: #34342f;
+  --color-line-kbd: #3a3a36;
+
+  --color-ink: #ecebe6;
+  --color-ink-2: #d4d2ca;
+  --color-ink-tool: #b5b3ab;
+  --color-ink-3: #a3a29b;
+  --color-ink-4: #8a8982;
+  --color-ink-5: #77766f;
+  --color-ink-6: #6f6e68;
+  --color-ink-7: #5a5953;
+  --color-on-light: #151514;
+
+  --color-accent: #d97757;
+  --color-accent-hover: #e8906f;
+  --color-accent-soft: #eba58b;
+  --color-danger: #e39a87;
+
+  --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+}
+
 html,
 body,
 #root {
   height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle, var(--color-line-strong) 1px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+
+/* React Flow theme overrides. */
+.react-flow {
+  --xy-background-color: var(--color-canvas);
+  --xy-selection-background-color: rgb(217 119 87 / 0.08);
+  --xy-selection-border: 1px solid rgb(217 119 87 / 0.6);
+  --xy-minimap-background-color: var(--color-chrome);
+  --xy-minimap-mask-background-color: rgb(17 17 16 / 0.7);
+  --xy-minimap-node-background-color: var(--color-line-strong);
+  --xy-attribution-background-color: transparent;
+  --xy-resize-background-color: var(--color-accent);
+  font-family: var(--font-sans);
+}
+
+.react-flow__attribution a {
+  color: var(--color-ink-7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

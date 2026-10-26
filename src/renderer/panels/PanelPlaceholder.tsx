@@ -1,38 +1,58 @@
 import type { Panel } from '@shared/types';
-import { panelKindLabel } from './panelMeta';
 
-function details(panel: Panel): [string, string][] {
+interface PlaceholderCopy {
+  title: string;
+  text: string;
+  meta?: string;
+}
+
+function copy(panel: Panel): PlaceholderCopy {
   switch (panel.type) {
     case 'terminal':
-      return [
-        ['Modalità', panel.mode],
-        ['Cartella', panel.cwd],
-      ];
+      return panel.mode === 'claude'
+        ? {
+            title: 'Claude Code',
+            text: 'Qui girerà Claude Code. Collega i panel con le frecce per dargli contesto.',
+            meta: `cwd ${panel.cwd}`,
+          }
+        : {
+            title: 'Terminale',
+            text: 'Qui girerà una shell nella cartella del progetto.',
+            meta: `cwd ${panel.cwd}`,
+          };
     case 'markdown':
-      return [['File', panel.filePath]];
+      return {
+        title: panel.filePath,
+        text: 'Qui leggi e modifichi il file. Claude lo vede quando lo colleghi.',
+      };
     case 'architecture':
-      return [['File', `.plancia/panels/${panel.id}.arch.json`]];
+      return {
+        title: 'Nessun nodo',
+        text: 'Disegna servizi e relazioni: Claude li riceve come JSON.',
+        meta: `.plancia/panels/${panel.id}.arch.json`,
+      };
     case 'code':
-      return [
-        ['Segue', panel.follow === 'all-agents' ? 'tutti gli agenti' : panel.follow.terminalId],
-      ];
+      return {
+        title: 'Nessun file aperto',
+        text: 'Qui vedi il codice che Claude scrive, riga per riga.',
+      };
   }
 }
 
-/** Placeholder body until each panel type gets its real content (M2–M7). */
+/** Empty body until each panel type gets its real content (M2–M7). */
 export function PanelPlaceholder({ panel }: { panel: Panel }) {
+  const { title, text, meta } = copy(panel);
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <p className="text-sm font-medium text-zinc-300">{panelKindLabel(panel)}</p>
-      <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-xs text-zinc-500">
-        {details(panel).map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-right">{k}</dt>
-            <dd className="text-left font-mono text-zinc-400">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="text-xs text-zinc-600">Contenuto in arrivo</p>
+    <div
+      className={`flex h-full flex-col items-center justify-center gap-1.5 p-6 text-center ${
+        panel.type === 'architecture'
+          ? 'bg-[radial-gradient(circle,#262624_1px,transparent_1.4px)] bg-size-[16px_16px]'
+          : ''
+      }`}
+    >
+      <span className="text-[13px] text-ink-2">{title}</span>
+      <span className="max-w-[34ch] text-xs text-pretty text-ink-4">{text}</span>
+      {meta && <span className="mt-2 font-mono text-[11px] text-ink-6">{meta}</span>}
     </div>
   );
 }
