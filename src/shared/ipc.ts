@@ -1,4 +1,5 @@
 import type { ActivityEvent } from './activity';
+import type { ArchDiff, ArchitectureDoc } from './architecture';
 import type { BoardIntent, Position, WorkspaceSnapshot } from './types';
 
 /**
@@ -37,6 +38,11 @@ export const IpcChannels = {
   manifestPreview: 'plancia:manifest:preview',
   /** main → renderer: a markdown file changed outside the panel. */
   markdownChanged: 'plancia:markdown:changed',
+  architectureRead: 'plancia:architecture:read',
+  architectureWrite: 'plancia:architecture:write',
+  architectureUndo: 'plancia:architecture:undo',
+  /** main → renderer: Claude changed an architecture, or a change was undone. */
+  architectureChanged: 'plancia:architecture:changed',
   activityList: 'plancia:activity:list',
   /** main → renderer: an activity entry was added or updated. */
   activityEvent: 'plancia:activity:event',
@@ -145,6 +151,28 @@ export type MarkdownWriteResult =
   | { ok: false; code: 'conflict'; doc: MarkdownDoc }
   | { ok: false; code: 'error'; message: string };
 
+export interface ArchitectureState {
+  doc: ArchitectureDoc;
+  /** Panel content version, as for markdown. */
+  version: number;
+  canUndo: boolean;
+}
+
+export interface ArchitectureChangedEvent extends ArchitectureState {
+  id: string;
+  author?: string | undefined;
+  undone?: boolean | undefined;
+  /** What changed, so the panel can highlight it. */
+  diff?: ArchDiff | undefined;
+}
+
+export type ArchitectureWriteResult =
+  | { ok: true; version: number; doc: ArchitectureDoc }
+  | { ok: false; code: 'conflict'; state: ArchitectureState }
+  | { ok: false; code: 'invalid' | 'error'; message: string };
+
+export type ArchitectureUndoResult = MarkdownUndoResult;
+
 export interface PlanciaApi {
   ping(): Promise<PingResponse>;
   workspace: {
@@ -186,6 +214,13 @@ export interface PlanciaApi {
     onChanged(listener: (event: MarkdownChangedEvent) => void): () => void;
     /** Restores the content before Claude's last write. */
     undo(id: string): Promise<MarkdownUndoResult>;
+  };
+  architecture: {
+    read(id: string): Promise<ArchitectureState>;
+    /** Saves the whole document (positions included); refused if `baseVersion` is stale. */
+    write(id: string, doc: ArchitectureDoc, baseVersion: number): Promise<ArchitectureWriteResult>;
+    undo(id: string): Promise<ArchitectureUndoResult>;
+    onChanged(listener: (event: ArchitectureChangedEvent) => void): () => void;
   };
   connections: {
     history(terminalId: string, panelId: string): Promise<ConnectionUse[]>;

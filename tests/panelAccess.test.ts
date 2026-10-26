@@ -2,11 +2,12 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ConnectionUse, MarkdownDoc } from '@shared/ipc';
+import type { ArchitectureChangedEvent, ConnectionUse, MarkdownDoc } from '@shared/ipc';
 import type { Connection, Panel } from '@shared/types';
 import { AccessService, PLANCIA_DIR_DENIED } from '../src/main/access/AccessService';
 import { ConnectionLog } from '../src/main/access/ConnectionLog';
 import { PanelTools } from '../src/main/access/panelTools';
+import { ArchitectureService } from '../src/main/architecture/ArchitectureService';
 import { MarkdownService, type MarkdownChange } from '../src/main/files/MarkdownService';
 
 let dir: string;
@@ -46,16 +47,22 @@ function setup(connections: Connection[], extraPanels: Panel[] = []) {
   let conns = connections;
   const changes: [string, MarkdownChange][] = [];
   const uses: ConnectionUse[] = [];
-  const markdown = new MarkdownService({
-    workspace: {
-      root: () => root,
-      panels: () => panels,
-      bumpContentVersion: (id) => {
-        let v = 0;
-        panels = panels.map((p) => (p.id === id ? { ...p, version: (v = p.version + 1) } : p));
-        return v;
-      },
+  const archEvents: ArchitectureChangedEvent[] = [];
+  const workspace = {
+    root: () => root,
+    panels: () => panels,
+    bumpContentVersion: (id: string) => {
+      let v = 0;
+      panels = panels.map((p) => (p.id === id ? { ...p, version: (v = p.version + 1) } : p));
+      return v;
     },
+  };
+  const architecture = new ArchitectureService({
+    workspace,
+    onChange: (event) => archEvents.push(event),
+  });
+  const markdown = new MarkdownService({
+    workspace,
     watch: () => undefined,
     onExternalChange: (id, change) => changes.push([id, change]),
   });
@@ -69,11 +76,14 @@ function setup(connections: Connection[], extraPanels: Panel[] = []) {
   const tools = new PanelTools({
     access,
     markdown,
+    architecture,
     log,
     panel: (id) => panels.find((p) => p.id === id),
   });
   return {
     markdown,
+    architecture,
+    archEvents,
     access,
     tools,
     log,
@@ -283,6 +293,104 @@ describe('MCP tools (PanelTools)', () => {
       ok: false,
       error: expect.stringContaining('deve essere testo'),
     });
+  });
+});
+
+describe('MCP tools on an Architecture panel', () => {
+  const archRead: Connection = {
+    id: 'ar',
+    source: 'arch',
+    target: 't1',
+    createdAt: base.updatedAt,
+  };
+  const archWrite: Connection = {
+    id: 'aw',
+    source: 't1',
+    target: 'arch',
+    createdAt: base.updatedAt,
+  };
+  const doc = {
+    schemaVersion: 1,
+    title: 'Backend v1',
+    nodes: [
+      { id: 'api', kind: 'api', label: 'API' },
+      { id: 'db', kind: 'database', label: 'Postgres', tech: 'Postgres 17' },
+    ],
+    edges: [{ id: 'api-db', from: 'api', to: 'db', protocol: 'SQL' }],
+  };
+
+  it('read_panel returns the document as JSON without positions, and logs the read', async () => {
+    const t = setup([archRead, archWrite]);
+    expect(await t.tools.writePanel('t1', 'arch', 1, doc)).toMatchObject({ ok: true });
+    const result = await t.tools.readPanel('t1', 'arch');
+    if (!result.ok) throw new Error(result.error);
+    expect(result.text).toContain('versione 2');
+    expect(result.text).toContain(
+      '{"id":"db","kind":"database","label":"Postgres","tech":"Postgres 17"}',
+    );
+    expect(result.text).not.toContain('position');
+    expect(t.uses.map((u) => [u.kind, u.via])).toEqual([
+      ['write', 'write_panel'],
+      ['read', 'read_panel'],
+    ]);
+  });
+
+  it('write_panel needs a write arrow', async () => {
+    const t = setup([archRead]);
+    expect(await t.tools.writePanel('t1', 'arch', 1, doc)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('sola lettura'),
+    });
+  });
+
+  it('write_panel accepts an object or a JSON string, places new nodes and keeps undo', async () => {
+    const t = setup([archWrite]);
+    expect(await t.tools.writePanel('t1', 'arch', 1, JSON.stringify(doc))).toMatchObject({
+      ok: true,
+      text: expect.stringContaining('2 nodi, 1 relazioni'),
+    });
+    const saved = JSON.parse(await readFile(join(root, '.plancia/panels/arch.arch.json'), 'utf8'));
+    expect(saved.nodes.every((n: { position?: unknown }) => n.position)).toBe(true);
+    expect(t.archEvents).toHaveLength(1);
+    expect(t.archEvents[0]).toMatchObject({ id: 'arch', author: 't1', canUndo: true });
+    expect(t.archEvents[0]!.diff?.addedNodes).toEqual(['api', 'db']);
+  });
+
+  it('refuses an invalid document with readable errors and writes nothing', async () => {
+    const t = setup([archWrite]);
+    const bad = { ...doc, edges: [{ id: 'x', from: 'api', to: 'worker' }] };
+    const result = await t.tools.writePanel('t1', 'arch', 1, bad);
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.error).toContain('ArchitectureDoc non valido');
+    expect(result.error).toContain('il nodo "worker" non esiste');
+    expect(result.error).toContain('get_panel_schema');
+    expect(t.version('arch')).toBe(1);
+    expect(await t.tools.writePanel('t1', 'arch', 1, '{not json')).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('Non è JSON valido'),
+    });
+  });
+
+  it('refuses a stale baseVersion and the append mode', async () => {
+    const t = setup([archWrite]);
+    expect(await t.tools.writePanel('t1', 'arch', 7, doc)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('Conflitto di versione'),
+    });
+    expect(await t.tools.writePanel('t1', 'arch', 1, doc, 'append')).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('append'),
+    });
+  });
+
+  it('get_panel_schema gives the JSON Schema of an ArchitectureDoc', () => {
+    const t = setup([]);
+    const result = t.tools.panelSchema('architecture');
+    if (!result.ok) throw new Error(result.error);
+    expect(result.text).toContain('"kind"');
+    expect(result.text).toContain('"service"');
+    expect(t.tools.panelSchema('markdown')).toMatchObject({ ok: false });
   });
 });
 

@@ -1,6 +1,6 @@
 # Architettura di OpenPlancia
 
-> **Aggiornato a: M5 + OpenPlancia** (connessioni, schermata iniziale) · prossima: M6 (panel Architettura)
+> **Aggiornato a: M6** (panel Architettura) · prossima: M7 (panel Codice)
 > Questo documento viene aggiornato alla fine di ogni milestone. Specifica di prodotto: [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
 
 OpenPlancia è un'app desktop **Electron**. Non c'è un backend remoto: il "backend" è il **processo main** (Node.js sul computer dell'utente), il "frontend" è il **renderer** (React in una finestra Chromium isolata). I due parlano solo attraverso un'API tipizzata e stretta esposta dal **preload**.
@@ -17,6 +17,7 @@ flowchart LR
     XT["xterm.js<br/>(registro istanze)"]
     ED["Monaco + react-markdown<br/>(panel Markdown)"]
     WR["Frecce · ispettore<br/>Cosa vede Claude"]
+    AE["Architettura<br/>anteprima SVG · editor React Flow"]
   end
 
   subgraph P["Preload"]
@@ -37,6 +38,7 @@ flowchart LR
     MF["Manifest<br/>contesto per Claude"]
     PT["PanelTools<br/>read/write_panel"]
     CL["ConnectionLog"]
+    AR["ArchitectureService<br/>+ layout dagre"]
   end
 
   subgraph X["Processi figli"]
@@ -74,6 +76,10 @@ flowchart LR
   MF --> CL
   CL -- "uso delle frecce" --> API
   WR <--> API
+  AE <-- "leggi · salva · scritture di Claude" --> API
+  API <--> AR
+  AR <--> DISK
+  PT --> AR
 ```
 
 **Regole che tengono in piedi tutto** (spec §3):
@@ -396,13 +402,70 @@ Ogni scrittura di Claude (via `write_panel` o via Edit/Write consentito) salva i
 
 ---
 
-## 8. Dove finiscono i dati
+## 8. Panel Architettura (M6)
+
+Un panel Architettura è un **diagramma di nodi e relazioni** salvato come JSON validato (`ArchitectureDoc`) in `.plancia/panels/<id>.arch.json`. Sulla lavagna si vede un'anteprima SVG statica; si modifica in modalità focus, con un'istanza di React Flow dedicata (mai annidata nella lavagna). Claude lo riceve come JSON e lo riscrive intero con `write_panel`.
+
+```mermaid
+flowchart LR
+  subgraph DOC["ArchitectureDoc (zod)"]
+    N["nodes: id · kind · label · tech? · notes? · position?"]
+    E["edges: id · from · to · label? · protocol?"]
+  end
+  UI["Editor in focus<br/>aggiungi · collega · etichetta · elimina"] -- "documento intero + baseVersion<br/>(autosalvataggio 400 ms)" --> AS["ArchitectureService"]
+  AS -- "valida, salva" --> F[(".plancia/panels/&lt;id&gt;.arch.json")]
+  AS -- "formatArchitectureForClaude<br/>(senza posizioni)" --> C["Claude<br/>manifesto o read_panel"]
+  C -- "write_panel(ArchitectureDoc)" --> AS
+```
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Claude
+  participant PT as PanelTools
+  participant AS as ArchitectureService
+  participant L as layout (dagre)
+  participant R as Panel sulla lavagna
+
+  C->>PT: write_panel(arch, baseVersion, content)
+  PT->>PT: freccia di scrittura? altrimenti "sola lettura"
+  PT->>AS: write(..., autore = terminale)
+  AS->>AS: parseArchitectureDoc (oggetto o stringa JSON)
+  alt non valido
+    AS-->>C: "ArchitectureDoc non valido, nulla è stato scritto" + errori riga per riga + get_panel_schema
+  else baseVersion vecchia
+    AS-->>C: conflitto, rileggi
+  else valido
+    AS->>AS: i nodi già presenti tengono la loro posizione
+    AS->>L: placeNewNodes (solo i nodi senza posizione)
+    AS->>AS: salva, version + 1, documento precedente nella pila di Annulla
+    AS-->>R: plancia:architecture:changed + diff
+    R->>R: lampeggia, nuovi nodi illuminati, rimossi in dissolvenza, "Annulla"
+    AS-->>C: "Scritto: versione n → n+1 (x nodi, y relazioni)"
+  end
+```
+
+| Regola | Dove |
+|---|---|
+| Schema rigido: tipi di nodo fissi, id leggibili (`a-z 0-9 - _ .`), id unici, relazioni solo tra nodi esistenti, nessun campo sconosciuto | [architecture.ts](src/shared/architecture.ts) |
+| Claude non vede le posizioni; una riga per nodo o relazione, JSON valido | `formatArchitectureForClaude` |
+| I nodi nuovi vanno dove dagre li metterebbe rispetto ai vicini, poi più in basso finché non coprono altri nodi; quelli esistenti non si muovono | [layout.ts](src/main/architecture/layout.ts) |
+| Il file nasce, si copia e si cancella insieme al panel (con conferma se il diagramma non è vuoto) | `ArchitectureService.boardChanged`, `confirmDelete` |
+| `.plancia/` resta protetta: le architetture si scrivono solo con `write_panel`, che valida | [AccessService.ts](src/main/access/AccessService.ts) |
+| Un nodo aggiunto dal menu prende un id provvisorio (`servizio-2`); quando gli dai un nome, l'id lo segue finché nessuna relazione lo usa | `readableId` in [ArchitectureEditor.tsx](src/renderer/panels/architecture/ArchitectureEditor.tsx) |
+
+**Perché JSON e quanto costa.** Misurato sul diagramma della demo (6 nodi, 6 relazioni): il JSON su disco, indentato e con le posizioni, è di 1.729 caratteri (~430 token); quello che riceve Claude è di 874 (~220 token); uno screenshot dello stesso diagramma ne costerebbe ~1.700. Mermaid sarebbe ancora più corto (~90 token), ma il JSON è validabile con uno schema, ha id stabili e Claude lo può riscrivere senza ambiguità. Il risparmio più grande viene dal manifesto: il contenuto entra nel contesto solo all'avvio e quando la versione cambia.
+
+---
+
+## 9. Dove finiscono i dati
 
 ```mermaid
 flowchart TB
   subgraph PRJ["Cartella progetto (versionabile)"]
     BJ[".plancia/board.json<br/>panel · posizioni · dimensioni · frecce · viewport · claudeSessionId · version"]
     MDF["file markdown dei panel<br/>(es. AGENTS.md, docs/*.md)"]
+    ARF[".plancia/panels/&lt;id&gt;.arch.json<br/>ArchitectureDoc dei panel Architettura"]
   end
   subgraph UD["userData dell'app (privato)"]
     SET["settings.json<br/>ultima cartella aperta"]
@@ -418,9 +481,9 @@ flowchart TB
 
 ---
 
-## 9. Mappa dei file per funzionalità
+## 10. Mappa dei file per funzionalità
 
-### 9.1 Contratto condiviso — `src/shared/`
+### 10.1 Contratto condiviso — `src/shared/`
 
 | File | Cosa contiene | Usato da |
 |---|---|---|
@@ -429,16 +492,17 @@ flowchart TB
 | [ipc.ts](src/shared/ipc.ts) | Nomi dei canali IPC (`plancia:*`), tipi dei messaggi (`MarkdownDoc`, `MarkdownWriteResult`…) e interfaccia `PlanciaApi` = forma di `window.plancia`. | main, preload, renderer |
 | [panels.ts](src/shared/panels.ts) | Dimensioni predefinite e minime dei panel, titoli predefiniti. | BoardStore, renderer |
 | [access.ts](src/shared/access.ts) | **Regole delle frecce** (funzioni pure, spec §6): `checkConnection`, `accessFor`, `wirePairs` (lettura + scrittura = un filo), `connectedPanels`, `isConnectable`, `accessLabel`. | main (applicazione), renderer (feedback) |
+| [architecture.ts](src/shared/architecture.ts) | **ArchitectureDoc** (M6): schema zod con controlli incrociati (id unici, relazioni verso nodi esistenti), `parseArchitectureDoc` (errori leggibili), `formatArchitectureForClaude`, `diffArchitecture`, `freeArchId`, dimensione dei nodi. | ArchitectureService, PanelTools, renderer |
 | [activity.ts](src/shared/activity.ts) | `ActivityEvent` (voce della timeline) e stati dei tool (`running/ok/failed/cancelled`). | ActivityLog, ActivityPanel |
 
-### 9.2 Main — avvio e IPC
+### 10.2 Main — avvio e IPC
 
 | File | Contesto |
 |---|---|
 | [main/index.ts](src/main/index.ts) | **Punto d'ingresso.** Crea la finestra sicura, istanzia e collega i servizi (WorkspaceService, PtyService, TerminalService, ActivityLog, LocalServer), registra tutti gli handler IPC con validazione zod, avvia il server, ripristina l'ultima cartella, sonda `claude --version`, gestisce l'uscita pulita (chiude i processi, salva, ferma il server). In sviluppo accetta `PLANCIA_USER_DATA`. |
 | [ipc/ping.ts](src/main/ipc/ping.ts) | Handler di prova della M0 (`window.plancia.ping()`). |
 
-### 9.3 Main — lavagna e workspace (M1)
+### 10.3 Main — lavagna e workspace (M1)
 
 | File | Contesto |
 |---|---|
@@ -450,7 +514,7 @@ flowchart TB
 | [util/debounce.ts](src/main/util/debounce.ts) | Task asincrono con debounce, senza sovrapposizioni, con `flush` (usato all'uscita). |
 | [files/resolveInWorkspace.ts](src/main/files/resolveInWorkspace.ts) | Risolve un percorso dentro il progetto e rifiuta traversal e symlink che escono, anche per file non ancora creati. Oggi protegge la `cwd` dei terminali; dalla M4 ogni file dei panel. |
 
-### 9.4 Main — terminali (M2)
+### 10.4 Main — terminali (M2)
 
 | File | Contesto |
 |---|---|
@@ -460,7 +524,7 @@ flowchart TB
 | [env/shellEnv.ts](src/main/env/shellEnv.ts) | Ambiente dei terminali: legge una volta l'ambiente della shell di login (per il PATH quando l'app parte dal Finder), toglie variabili di OpenPlancia e di un'eventuale sessione Claude Code ospite, imposta `TERM`/`COLORTERM`/`LANG`. `findExecutable` cerca nel PATH. |
 | [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) | Tutto ciò che riguarda **come si lancia `claude`**: argomenti (`--session-id`, `--name`, `--resume`, `--mcp-config`, `--settings`, `--append-system-prompt-file`), file di run per terminale (permessi 0600), settings con gli hook, comando del ponte SessionStart, prompt di sistema, `claude --version`, `.cmd` su Windows. |
 
-### 9.5 Main — server locale, hook, MCP, attività (M3)
+### 10.5 Main — server locale, hook, MCP, attività (M3)
 
 | File | Contesto |
 |---|---|
@@ -471,7 +535,7 @@ flowchart TB
 | [activity/ActivityLog.ts](src/main/activity/ActivityLog.ts) | Timeline per terminale: in memoria + JSONL su disco per workspace, ultimi 500 eventi, scritture in coda, aggiornamento dei tool per `tool_use_id`, tool non conclusi → "annullati". |
 | [resources/plancia-hook.cjs](resources/plancia-hook.cjs) | Ponte per gli hook `command`: legge l'evento da stdin, lo manda al server, stampa la risposta. Esce sempre con 0. |
 
-### 9.6 Main — file e panel Markdown (M4)
+### 10.6 Main — file e panel Markdown (M4)
 
 | File | Contesto |
 |---|---|
@@ -479,25 +543,34 @@ flowchart TB
 | [files/FileWatcher.ts](src/main/files/FileWatcher.ts) | chokidar su un insieme esplicito di file (quelli dei panel), con `atomic` e `awaitWriteFinish`: i salvataggi "file temporaneo + rename" di editor e OpenPlancia arrivano come un solo cambiamento. |
 | [main/index.ts](src/main/index.ts) (parte M4) | Dialog nativo "Nuovo / Apri file markdown" (`createMarkdownPanel`), handler IPC `markdown:*`, sincronizzazione del watcher all'apertura di una cartella e quando si creano, duplicano o eliminano panel. |
 
-### 9.7 Main — connessioni (M5)
+### 10.7 Main — connessioni (M5)
 
 | File | Contesto |
 |---|---|
 | [access/AccessService.ts](src/main/access/AccessService.ts) | Accesso di un terminale a un panel dalle frecce correnti. `checkFileWrite`: guardia `PreToolUse` per Write/Edit/MultiEdit/NotebookEdit (realpath, `.plancia/`, file dei panel Markdown). Messaggi d'errore della spec (`deniedMessage`). |
-| [access/panelTools.ts](src/main/access/panelTools.ts) | Implementazione dei tool MCP: `list_panels`, `read_panel`, `write_panel` (replace/append, `baseVersion`, conflitti leggibili). Architettura: in M6. |
+| [access/panelTools.ts](src/main/access/panelTools.ts) | Implementazione dei tool MCP: `list_panels`, `read_panel`, `write_panel` (replace/append, `baseVersion`, conflitti leggibili). Dalla M6 anche le architetture e `panelSchema` (JSON Schema da `z.toJSONSchema`). |
 | [access/ConnectionLog.ts](src/main/access/ConnectionLog.ts) | Letture e scritture per freccia (ultime 30): via manifesto, `read_panel`, `write_panel`, Edit/Write di Claude. Evento al renderer per l'animazione. |
 | [claude/manifest.ts](src/main/claude/manifest.ts) | `renderManifest` (formato, limite 9.000 caratteri), `describeChanges`, `ManifestTracker` (iniezione a SessionStart e solo se cambiato a UserPromptSubmit), `collectManifestEntries`. |
 | [server/hooks.ts](src/main/server/hooks.ts) (parte M5) | Ora asincrono: restituisce il manifesto in `additionalContext` e la decisione `deny` in `PreToolUse`. |
 | [server/mcp.ts](src/main/server/mcp.ts) (parte M5) | Registra `list_panels`, `read_panel`, `write_panel` con schemi zod; errori come `isError`. |
 | [files/MarkdownService.ts](src/main/files/MarkdownService.ts) (parte M5) | Scritture con autore (terminale), pila di Annulla per file (20), `expectClaudeWrite` per attribuire a Claude la modifica che segue un Edit consentito. |
 
-### 9.8 Preload
+### 10.8 Main — panel Architettura (M6)
+
+| File | Contesto |
+|---|---|
+| [architecture/ArchitectureService.ts](src/main/architecture/ArchitectureService.ts) | **Documenti dei panel Architettura** in `.plancia/panels/<id>.arch.json`: lettura (file mancante = diagramma vuoto, file non valido = errore leggibile), scrittura validata con `baseVersion`, scritture di Claude che conservano le posizioni e piazzano i nodi nuovi, pila di Annulla (20), evento con il diff. `boardChanged` crea, copia ed elimina il file insieme al panel. |
+| [architecture/layout.ts](src/main/architecture/layout.ts) | `placeNewNodes`: layout dagre (sinistra → destra) usato solo per i nodi senza posizione, ancorato ai vicini già piazzati, senza sovrapposizioni. |
+| [server/mcp.ts](src/main/server/mcp.ts) (parte M6) | Tool `get_panel_schema` (`type: "architecture"`); descrizione di `write_panel` per le architetture. |
+| [claude/ClaudeLauncher.ts](src/main/claude/ClaudeLauncher.ts) (parte M6) | Il prompt di sistema spiega che le architetture sono JSON da riscrivere interi con `write_panel`. |
+
+### 10.9 Preload
 
 | File | Contesto |
 |---|---|
 | [preload/index.ts](src/preload/index.ts) | Espone `window.plancia` con `contextBridge`: `workspace`, `board`, `app`, `terminal`, `markdown` (anche `undo`), `connections` (cronologia, eventi d'uso, manifesto), `activity`. Solo chiamate ad alto livello, mai `ipcRenderer` grezzo. Compilato in CommonJS (`index.cjs`) perché la sandbox lo richiede. |
 
-### 9.9 Renderer — app e lavagna
+### 10.10 Renderer — app e lavagna
 
 | File | Contesto |
 |---|---|
@@ -513,7 +586,7 @@ flowchart TB
 | [canvas/FocusOverlay.tsx](src/renderer/canvas/FocusOverlay.tsx) | Modalità focus: un panel a schermo pieno al 100%. Esc esce, tranne quando si scrive in un terminale. |
 | [components/](src/renderer/components/) | `EmptyState` (schermata iniziale: apri cartella e cartelle recenti), `ErrorToast`, `InfoToast`, `Logo`. |
 
-### 9.10 Renderer — panel
+### 10.11 Renderer — panel
 
 | File | Contesto |
 |---|---|
@@ -521,7 +594,11 @@ flowchart TB
 | [panels/Ports.tsx](src/renderer/panels/Ports.tsx) | Porte di collegamento ai lati dei panel collegabili (Claude, Markdown, Architettura), sopra i controlli di ridimensionamento; piene se il panel ha frecce. |
 | [panels/StatusBadge.tsx](src/renderer/panels/StatusBadge.tsx) · [panelMeta.ts](src/renderer/panels/panelMeta.ts) | Badge di stato con colori del design; etichette; conferma di eliminazione per processi in esecuzione. |
 | [panels/PanelIcon.tsx](src/renderer/panels/PanelIcon.tsx) · [panelIcons.ts](src/renderer/panels/panelIcons.ts) | Icone Phosphor per tipo di panel. |
-| [panels/PanelPlaceholder.tsx](src/renderer/panels/PanelPlaceholder.tsx) | Corpo provvisorio di Architettura e Codice (sostituito da M6, M7). |
+| [panels/PanelPlaceholder.tsx](src/renderer/panels/PanelPlaceholder.tsx) | Corpo provvisorio del panel Codice (sostituito in M7). |
+| [panels/architecture/ArchitectureBody.tsx](src/renderer/panels/architecture/ArchitectureBody.tsx) | Corpo del panel Architettura: conteggio nodi e relazioni, "Vedi JSON", "Modifica" (apre la modalità focus), barra "Modificato da · Annulla", anteprima sulla lavagna o editor in focus (lazy). |
+| [panels/architecture/ArchitecturePreview.tsx](src/renderer/panels/architecture/ArchitecturePreview.tsx) | Anteprima SVG statica: nodi con icona e colore per tipo, frecce tra i bordi con etichetta e protocollo; aggiunte di Claude illuminate, rimozioni in dissolvenza. |
+| [panels/architecture/ArchitectureEditor.tsx](src/renderer/panels/architecture/ArchitectureEditor.tsx) | Editor in modalità focus con un React Flow dedicato: "Aggiungi nodo" per tipo, collegamento trascinando da un pallino (anche rilasciando sul corpo del nodo), frecce "flottanti", pannello proprietà (nome, tipo, tecnologia, note; etichetta, protocollo, inverti), Canc per eliminare. |
+| [panels/architecture/archKinds.ts](src/renderer/panels/architecture/archKinds.ts) · [geometry.ts](src/renderer/panels/architecture/geometry.ts) | Icona e colore per tipo di nodo; punto sul bordo di un nodo ed etichetta di una relazione, condivisi da anteprima ed editor. |
 | [panels/markdown/MarkdownBody.tsx](src/renderer/panels/markdown/MarkdownBody.tsx) | Corpo del panel Markdown: interruttore Anteprima / Modifica, percorso, stato del salvataggio, avvisi (conflitto, file mancante con "Crea il file", errore). |
 | [panels/markdown/MarkdownEditor.tsx](src/renderer/panels/markdown/MarkdownEditor.tsx) | Monaco in modalità markdown, caricato a richiesta (lazy), Cmd/Ctrl+S per salvare subito. |
 | [panels/markdown/MarkdownPreview.tsx](src/renderer/panels/markdown/MarkdownPreview.tsx) | react-markdown + GFM (tabelle, checklist); i link http(s) si aprono nel browser di sistema. Stili `.md-preview` in [index.css](src/renderer/index.css). |
@@ -530,21 +607,23 @@ flowchart TB
 | [panels/terminal/TerminalBody.tsx](src/renderer/panels/terminal/TerminalBody.tsx) | Corpo del terminale: schermata di avvio / ripresa, errore (Claude non trovato), xterm, barra "processo terminato". |
 | [panels/terminal/TerminalPreview.tsx](src/renderer/panels/terminal/TerminalPreview.tsx) · [xtermTheme.ts](src/renderer/panels/terminal/xtermTheme.ts) | Anteprima a zoom basso; tema e font del terminale (con fallback Nerd Font). |
 
-### 9.11 Renderer — ispettori e store
+### 10.12 Renderer — ispettori e store
 
 | File | Contesto |
 |---|---|
 | [inspectors/WireInspector.tsx](src/renderer/inspectors/WireInspector.tsx) | Ispettore della freccia (spec §9). Condivide il lato destro con Attività: uno alla volta. |
 | [inspectors/ManifestModal.tsx](src/renderer/inspectors/ManifestModal.tsx) | "Cosa vede Claude" (menu del terminale Claude). |
+| [inspectors/ArchJsonModal.tsx](src/renderer/inspectors/ArchJsonModal.tsx) | "Vedi JSON": il documento esattamente come lo riceve Claude, con caratteri, token stimati e "Copia". |
 | [stores/connectionStore.ts](src/renderer/stores/connectionStore.ts) | Ultimo uso per filo e fili "attivi" negli ultimi 3 s (animazione), stima token = caratteri / 4. |
 | [inspectors/ActivityPanel.tsx](src/renderer/inspectors/ActivityPanel.tsx) | Pannello laterale "Attività": timeline cronologica con icone per tipo e stato dei tool. |
 | [stores/workspaceStore.ts](src/renderer/stores/workspaceStore.ts) | Specchio dello snapshot del main + nodi React Flow (selezione e trascinamento solo locali). Manda gli intenti. |
 | [stores/terminalStore.ts](src/renderer/stores/terminalStore.ts) | Info app (versione Claude), errori e codici d'uscita dei terminali, avvio. |
 | [stores/activityStore.ts](src/renderer/stores/activityStore.ts) | Timeline per terminale, caricata quando si apre il pannello e aggiornata dagli eventi. |
 | [stores/markdownStore.ts](src/renderer/stores/markdownStore.ts) | Per ogni panel Markdown: ultimo contenuto salvato e versione, bozza locale, stato del salvataggio, autosalvataggio dopo 500 ms, conflitti con le modifiche esterne. La bozza vive fuori dal componente: sopravvive al passaggio tra lavagna e modalità focus. |
-| [stores/uiStore.ts](src/renderer/stores/uiStore.ts) | Stato solo visivo: strumento attivo, panel in modalità focus, pannello Attività aperto, menu Markdown aperto. |
+| [stores/architectureStore.ts](src/renderer/stores/architectureStore.ts) | Per ogni panel Architettura: documento mostrato, versione, autosalvataggio dopo 400 ms, conflitti, ultima modifica di Claude (diff per evidenziare), Annulla. |
+| [stores/uiStore.ts](src/renderer/stores/uiStore.ts) | Stato solo visivo: strumento attivo, panel in modalità focus, pannello Attività aperto, menu Markdown aperto, panel di cui mostrare il JSON. |
 
-### 9.12 Test — `tests/`
+### 10.13 Test — `tests/`
 
 | Area | File |
 |---|---|
@@ -552,31 +631,32 @@ flowchart TB
 | Terminali | `PtyService`, `TerminalService` (con [fakePty.ts](tests/fakePty.ts)), `shellEnv` |
 | Sicurezza percorsi | `resolveInWorkspace` |
 | Connessioni (M5) | `access` (tabella della spec), `manifest` (formato, limiti, solo-se-cambiato), `panelAccess` (PreToolUse, tool MCP, conflitti, percorsi fuori progetto, Annulla, attribuzione), `hooks` (iniezione e deny), `BoardStore` (connect/disconnect) |
+| Architettura (M6) | `architecture` (schema e messaggi d'errore, formato per Claude, diff, id, layout che non sposta i nodi esistenti, file creati / copiati / eliminati col panel, Annulla), `panelAccess` (tool MCP sulle architetture, JSON non valido, conflitti, `get_panel_schema`) |
 | Markdown | `MarkdownService` (versioni, conflitti, eco, file mancanti, percorsi fuori progetto), `FileWatcher` (chokidar reale) |
 | Claude / server | `hooks`, `LocalServer` (anche MCP reale via SDK e ponte `.cjs`), `ClaudeLauncher`, `ActivityLog` |
 | Contratto | `ipc`, `ping` |
 
 ---
 
-## 10. Roadmap e dove andrà il codice
+## 11. Roadmap e dove andrà il codice
 
 ```mermaid
 flowchart LR
   M0["M0 Scaffold ✅"] --> M1["M1 Lavagna ✅"] --> M2["M2 Terminali ✅"] --> M3["M3 Server e hook ✅"]
-  M3 --> M4["M4 Markdown ✅"] --> M5["M5 Connessioni ✅"] --> M6["M6 Architettura ⏳"] --> M7["M7 Codice ⏳"]
+  M3 --> M4["M4 Markdown ✅"] --> M5["M5 Connessioni ✅"] --> M6["M6 Architettura ✅"] --> M7["M7 Codice ⏳"]
 ```
 
 | Milestone | Nuovi pezzi previsti (spec §11) |
 |---|---|
-| **M6 Architettura** | schema `ArchitectureDoc`, `.plancia/panels/<id>.arch.json`, `renderer/panels/architecture/` (anteprima SVG + editor in focus), layout dagre, `get_panel_schema` |
 | **M7 Codice** | `main/git/GitService.ts`, `renderer/panels/code/` (Monaco sola lettura + diff), feed dei file dal `PostToolUse` |
 
 ---
 
-## 11. Registro degli aggiornamenti
+## 12. Registro degli aggiornamenti
 
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
+| M6 | Panel Architettura: nuova sezione 8 (documento, flusso di scrittura di Claude, regole, costo in token), ArchitectureService nella visione d'insieme, `.arch.json` nei dati, file nuovi in mappa; sezioni successive rinumerate |
 | — | Rinomina in **OpenPlancia**; schermata iniziale con cartelle recenti (clic sul logo = home); `WorkspaceService.goHome/recent/openRecent`. Identificatori interni (`.plancia/`, MCP `plancia`) invariati. |
 | M5 | Connessioni: nuova sezione 7 (regole, manifesto, MCP e protezione, Annulla, trasparenza), servizi M5 nella visione d'insieme, file nuovi in mappa |
 | M4 | Panel Markdown: MarkdownService e FileWatcher nella visione d'insieme, diagramma salvataggio / modifiche esterne / conflitti, nuovi file in mappa (main, renderer, test), nota su Monaco `EditContext` e `nokey` |

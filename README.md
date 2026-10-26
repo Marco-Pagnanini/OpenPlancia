@@ -12,7 +12,7 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-159%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/test-180%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
 [![Stato](https://img.shields.io/badge/stato-MVP%20in%20sviluppo-F2994A?style=flat-square)](#%EF%B8%8F-roadmap)
 
 [Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
@@ -31,9 +31,9 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 
 <div align="center">
 
-<img src="docs/assets/board.png" alt="Una lavagna di OpenPlancia: un file Markdown collegato a una sessione Claude Code, con l'inspector della connessione aperto" width="100%" />
+<img src="docs/assets/board.png" alt="Una lavagna di OpenPlancia: un diagramma di architettura collegato a una sessione Claude Code con una freccia viola" width="100%" />
 
-<sub>Un file collegato a Claude con una freccia viola (lettura e scrittura): l'inspector mostra ogni lettura e scrittura, con versione e token.</sub>
+<sub>Un diagramma di architettura collegato a Claude con una freccia viola (lettura e scrittura). Claude ha provato a scrivere una relazione verso un nodo inesistente: OpenPlancia l'ha rifiutata con un errore leggibile.</sub>
 
 </div>
 
@@ -96,6 +96,15 @@ La freccia si anima quando Claude la usa. L'inspector mostra letture e scritture
 
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top">
+
+### 📐 Schemi di architettura che Claude capisce e modifica
+
+Disegni servizi, API, database e code con un editor a nodi; Claude li riceve come **JSON validato** e li può modificare. Se gli chiedi "aggiungi una coda tra API e worker", il diagramma si aggiorna: i nodi nuovi si posizionano da soli vicino a quelli collegati e quelli esistenti restano dove li hai messi. Un documento non valido viene rifiutato con l'errore esatto (es. `to: il nodo "fantasma" non esiste`), e **"Vedi JSON"** mostra quello che riceve Claude.
+
+</td>
+</tr>
 </table>
 
 <div align="center">
@@ -152,10 +161,29 @@ sequenceDiagram
 ```
 
 - **Hook** verso un server locale su `127.0.0.1` (porta casuale, token nel percorso): `SessionStart` tramite un piccolo script ponte, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification` e `Stop` via HTTP.
-- **Server MCP `plancia`** con i tool `list_panels`, `read_panel`, `write_panel`.
+- **Server MCP `plancia`** con i tool `list_panels`, `read_panel`, `write_panel` e `get_panel_schema` (JSON Schema degli schemi di architettura).
 - **Niente fuori dalla cartella del progetto**: ogni percorso viene risolto e controllato prima di leggere o scrivere.
 
 </details>
+
+## 🪙 JSON e token: cosa si risparmia davvero
+
+Gli schemi di architettura arrivano a Claude come JSON, non come immagini né come descrizioni a parole. Misurato su un diagramma reale di 6 nodi e 6 relazioni (token stimati come caratteri / 4):
+
+| Come lo si potrebbe passare a Claude                                | Token circa | Note                                                       |
+| ------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- |
+| Screenshot del diagramma (~1400×900)                                | ~1.700      | Claude deve "leggere" l'immagine; non la può modificare    |
+| JSON indentato con le posizioni (com'è salvato su disco)            | ~430        | Metà dei caratteri sono spazi e coordinate                 |
+| **JSON che riceve Claude** (senza posizioni, una riga per elemento) | **~220**    | Validato, id stabili, Claude lo riscrive con `write_panel` |
+| Mermaid                                                             | ~90         | Più corto, ma senza schema né validazione                  |
+
+Quindi sì, rispetto a uno screenshot si risparmia circa **8 volte** e rispetto al JSON "grezzo" circa la metà. Il JSON non è il formato più corto in assoluto: lo usiamo perché è **preciso**. Ogni scrittura di Claude viene controllata (id unici, relazioni verso nodi che esistono) e un errore non rompe mai il diagramma.
+
+Il risparmio più grande però non dipende dal formato, ma da **quando** e **cosa** si manda:
+
+- **Solo i panel collegati** entrano nel contesto, non l'intero progetto.
+- Il contenuto viene mandato **all'avvio della sessione e poi solo se cambia** (la versione del panel è aumentata o le frecce sono cambiate). Se scrivi dieci messaggi senza toccare il diagramma, Claude lo riceve una volta sola.
+- Oltre i 9.000 caratteri di contesto, i panel più grandi restano fuori e Claude li legge con `read_panel` solo se gli servono.
 
 ## 🚀 Avvio rapido
 
@@ -191,6 +219,7 @@ Poi **Apri cartella progetto**, premi <kbd>L</kbd> per una sessione Claude, <kbd
 | <kbd>T</kbd>                           | nuovo terminale                         |
 | <kbd>L</kbd>                           | nuova sessione Claude                   |
 | <kbd>M</kbd>                           | nuovo file Markdown o apri un esistente |
+| <kbd>A</kbd>                           | nuovo schema di architettura            |
 | <kbd>0</kbd>                           | inquadra tutti i panel                  |
 | <kbd>Backspace</kbd> / <kbd>Canc</kbd> | elimina i panel o le frecce selezionati |
 | <kbd>Esc</kbd>                         | torna al puntatore                      |
@@ -224,6 +253,7 @@ Per provare senza toccare le proprie impostazioni: `PLANCIA_USER_DATA=/percorso 
 | Interfaccia         | React 19 · React Flow 12 · zustand · Tailwind CSS 4 · Phosphor Icons · Geist |
 | Terminali           | node-pty · xterm.js 6 (WebGL sul panel attivo)                               |
 | Editor              | Monaco (caricato solo quando serve)                                          |
+| Diagrammi           | React Flow dedicato in modalità focus · anteprima SVG · layout con dagre     |
 | File                | chokidar per le modifiche esterne · scritture atomiche                       |
 | Contratti           | TypeScript strict · zod a ogni confine (IPC, file, hook)                     |
 | Integrazione Claude | hook · server MCP locale · `--session-id` / `--resume`                       |
@@ -241,14 +271,14 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 - [x] **M4** · Panel Markdown con modifica, modifiche esterne e conflitti
 - [x] **M5** · Frecce come contesto: lettura, scrittura, blocco, Annulla, inspector
 - [x] Schermata iniziale con cartelle recenti
-- [ ] **M6** · Panel Architettura: schemi che Claude può leggere e modificare
+- [x] **M6** · Panel Architettura: schemi in JSON validato che Claude legge e modifica, layout automatico, "Vedi JSON"
 - [ ] **M7** · Panel Codice: file e diff in sola lettura, aggiornati da quello che Claude modifica
 
 ## 🔒 Sicurezza
 
 - Renderer isolato (`contextIsolation`, `sandbox`, niente `nodeIntegration`) con CSP restrittiva; il preload espone solo un'API tipizzata.
 - Il server locale ascolta solo su `127.0.0.1`, con porta casuale e token a 32 byte; i file di avvio delle sessioni stanno nella cartella dati dell'app, mai nel progetto.
-- Lettura e scrittura limitate alla cartella del progetto; `.plancia/` non è mai scrivibile da Claude.
+- Lettura e scrittura limitate alla cartella del progetto. Claude non scrive mai direttamente dentro `.plancia/`: gli schemi di architettura passano da `write_panel`, che li valida.
 - Navigazione e nuove finestre bloccate; i link si aprono nel browser di sistema.
 
 ## ⚠️ Limiti noti

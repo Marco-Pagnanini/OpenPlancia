@@ -23,10 +23,10 @@ const SAVE_LABEL: Record<SaveState, string> = {
   error: 'Salvataggio non riuscito',
 };
 
-const BAR_BUTTON =
+export const BAR_BUTTON =
   'flex h-6 items-center gap-1.5 rounded-md border border-line-strong bg-raised px-2 text-[11.5px] font-medium text-ink hover:bg-line-soft';
 
-function Notice({ tone, children }: { tone: 'warning' | 'error'; children: ReactNode }) {
+export function Notice({ tone, children }: { tone: 'warning' | 'error'; children: ReactNode }) {
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}

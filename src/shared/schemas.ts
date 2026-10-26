@@ -167,6 +167,12 @@ export const markdownWriteSchema = z.object({
   content: z.string().max(MARKDOWN_MAX_CHARS),
   baseVersion: z.number().int().nonnegative(),
 });
+/** The document itself is validated by ArchitectureService with the ArchitectureDoc schema. */
+export const architectureWriteSchema = z.object({
+  id: terminalIdSchema,
+  doc: z.unknown(),
+  baseVersion: z.number().int().nonnegative(),
+});
 export const externalUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const appSettingsSchema = z.object({

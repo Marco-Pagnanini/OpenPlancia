@@ -12,6 +12,7 @@ export interface PlanciaMcpDeps {
     content: unknown,
     mode: 'replace' | 'append' | undefined,
   ): Promise<ToolResult>;
+  panelSchema(type: string): ToolResult;
   onToolCall(terminalId: string, tool: string): void;
 }
 
@@ -63,17 +64,33 @@ export function createPlanciaMcpServer(terminalId: string, deps: PlanciaMcpDeps)
     {
       title: 'Scrivi un panel collegato',
       description:
-        'Scrive un panel collegato in scrittura (freccia Terminale → Panel). Per i markdown "content" è il testo completo (mode "replace", predefinito) o da aggiungere in fondo (mode "append"). baseVersion è la versione letta: se il panel è cambiato nel frattempo la scrittura viene rifiutata.',
+        'Scrive un panel collegato in scrittura (freccia Terminale → Panel). Per i markdown "content" è il testo completo (mode "replace", predefinito) o da aggiungere in fondo (mode "append"). Per le architetture "content" è l\'ArchitectureDoc completo (oggetto JSON, schema da get_panel_schema): viene validato e, se non è valido, nulla viene scritto. baseVersion è la versione letta: se il panel è cambiato nel frattempo la scrittura viene rifiutata.',
       inputSchema: {
         panelId: z.string().describe('Id del panel'),
         baseVersion: z.number().int().describe('Versione su cui si basa la modifica'),
-        content: z.unknown().describe('Testo per i markdown'),
+        content: z
+          .unknown()
+          .describe('Testo per i markdown; ArchitectureDoc (oggetto JSON) per le architetture'),
         mode: z.enum(['replace', 'append']).optional(),
       },
     },
     async ({ panelId, baseVersion, content, mode }) => {
       deps.onToolCall(terminalId, 'write_panel');
       return reply(await deps.writePanel(terminalId, panelId, baseVersion, content, mode));
+    },
+  );
+
+  server.registerTool(
+    'get_panel_schema',
+    {
+      title: 'Schema del contenuto di un panel',
+      description:
+        'JSON Schema del contenuto di un tipo di panel. Per "architecture" descrive l\'ArchitectureDoc da passare a write_panel.',
+      inputSchema: { type: z.literal('architecture').describe('Tipo di panel') },
+    },
+    ({ type }) => {
+      deps.onToolCall(terminalId, 'get_panel_schema');
+      return reply(deps.panelSchema(type));
     },
   );
 

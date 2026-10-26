@@ -26,6 +26,7 @@ beforeEach(async () => {
         listPanels: () => ({ ok: true, text: 'Nessun panel', data: { panels: [] } }),
         readPanel: async (_t, panelId) => ({ ok: false, error: `Accesso negato: ${panelId}` }),
         writePanel: async () => ({ ok: true, text: 'Scritto', data: { version: 2 } }),
+        panelSchema: (type) => ({ ok: true, text: `schema ${type}`, data: { type } }),
         onToolCall: (terminalId, tool) => toolCalls.push(`${terminalId}:${tool}`),
       }),
   });
@@ -114,7 +115,12 @@ describe('LocalServer', () => {
     const client = new Client({ name: 'test', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(server.url('mcp', 'term-1'))));
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(['list_panels', 'read_panel', 'write_panel']);
+    expect(tools.map((t) => t.name)).toEqual([
+      'list_panels',
+      'read_panel',
+      'write_panel',
+      'get_panel_schema',
+    ]);
     const result = await client.callTool({ name: 'list_panels', arguments: {} });
     expect(result.structuredContent).toEqual({ panels: [] });
     const denied = await client.callTool({ name: 'read_panel', arguments: { panelId: 'md-1' } });
@@ -124,7 +130,17 @@ describe('LocalServer', () => {
       arguments: { panelId: 'md-1', baseVersion: 1, content: 'x' },
     });
     expect(written.structuredContent).toEqual({ version: 2 });
-    expect(toolCalls).toEqual(['term-1:list_panels', 'term-1:read_panel', 'term-1:write_panel']);
+    const schema = await client.callTool({
+      name: 'get_panel_schema',
+      arguments: { type: 'architecture' },
+    });
+    expect(schema.structuredContent).toEqual({ type: 'architecture' });
+    expect(toolCalls).toEqual([
+      'term-1:list_panels',
+      'term-1:read_panel',
+      'term-1:write_panel',
+      'term-1:get_panel_schema',
+    ]);
     await client.close();
   });
 });

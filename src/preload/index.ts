@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   IpcChannels,
+  type ArchitectureChangedEvent,
   type ConnectionUse,
   type MarkdownChangedEvent,
   type PlanciaApi,
@@ -53,6 +54,14 @@ const api: PlanciaApi = {
       ipcRenderer.invoke(IpcChannels.markdownWrite, { id, content, baseVersion }),
     onChanged: (listener) => subscribe<MarkdownChangedEvent>(IpcChannels.markdownChanged, listener),
     undo: (id) => ipcRenderer.invoke(IpcChannels.markdownUndo, { id }),
+  },
+  architecture: {
+    read: (id) => ipcRenderer.invoke(IpcChannels.architectureRead, { id }),
+    write: (id, doc, baseVersion) =>
+      ipcRenderer.invoke(IpcChannels.architectureWrite, { id, doc, baseVersion }),
+    undo: (id) => ipcRenderer.invoke(IpcChannels.architectureUndo, { id }),
+    onChanged: (listener) =>
+      subscribe<ArchitectureChangedEvent>(IpcChannels.architectureChanged, listener),
   },
   connections: {
     history: (terminalId, panelId) =>

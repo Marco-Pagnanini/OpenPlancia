@@ -226,3 +226,28 @@ body {
   stroke-width: 1.75;
   stroke-dasharray: 6 5;
 }
+
+/* Architecture panels: what Claude added glows for a while, what it removed fades away. */
+@keyframes arch-new {
+  0%,
+  60% {
+    filter: drop-shadow(0 0 6px var(--color-accent));
+  }
+  100% {
+    filter: none;
+  }
+}
+.arch-new {
+  animation: arch-new 4s ease-out;
+}
+@keyframes arch-removed {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.arch-removed {
+  animation: arch-removed 1.4s ease-out forwards;
+}
