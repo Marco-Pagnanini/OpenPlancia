@@ -66,6 +66,24 @@ describe('BoardStore', () => {
     expect(persistedBoardSchema.safeParse(toPersisted(store.getBoard())).success).toBe(true);
   });
 
+  it('sets what a Code panel follows and the file opened by hand', () => {
+    const store = makeStore();
+    store.apply({ type: 'createPanel', panelType: 'code', position: at });
+    store.apply({ type: 'createPanel', panelType: 'terminal', position: at, mode: 'claude' });
+    const [code, term] = store.getBoard().panels;
+    store.apply({ type: 'setCodeFollow', id: code!.id, follow: { terminalId: term!.id } });
+    store.apply({ type: 'setCodePinned', id: code!.id, pinnedFile: 'src/main.ts' });
+    expect(store.getBoard().panels[0]).toMatchObject({
+      follow: { terminalId: term!.id },
+      pinnedFile: 'src/main.ts',
+    });
+    store.apply({ type: 'setCodePinned', id: code!.id, pinnedFile: null });
+    expect(store.getBoard().panels[0]).not.toHaveProperty('pinnedFile');
+    expect(() =>
+      store.apply({ type: 'setCodeFollow', id: term!.id, follow: 'all-agents' }),
+    ).toThrow(BoardError);
+  });
+
   it('numbers duplicate default titles', () => {
     const store = makeStore();
     for (let i = 0; i < 3; i++)

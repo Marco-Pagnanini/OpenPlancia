@@ -1,7 +1,7 @@
 import type { ActivityEvent, ActivityTool } from '@shared/activity';
 import { hookPayloadSchema } from '@shared/schemas';
 import type { TerminalPanel, TerminalRuntime } from '@shared/types';
-import { displayPath, toolFilePath, toolLabel } from './toolLabel';
+import { displayPath, EDIT_TOOLS, toolFilePath, toolLabel } from './toolLabel';
 
 export type NewActivity = Omit<ActivityEvent, 'id' | 'at' | 'terminalId'>;
 
@@ -26,6 +26,8 @@ export interface HookDeps {
     toolInput: Record<string, unknown> | undefined,
     cwd: string | undefined,
   ): Promise<string | null>;
+  /** Claude changed a file (Write/Edit/MultiEdit/NotebookEdit done): the Code panel feed. */
+  fileTouched?(id: string, toolName: string, path: string, cwd: string | undefined): void;
 }
 
 /** JSON body returned to Claude Code; null means "200 with an empty body". */
@@ -126,6 +128,10 @@ export async function handleHook(
       deps.setRuntime(terminalId, { status: 'working', currentTool: undefined });
       if (hook.tool_use_id) {
         deps.updateTool(terminalId, hook.tool_use_id, { state: failed ? 'failed' : 'ok' });
+      }
+      const touched = toolFilePath(hook.tool_input);
+      if (!failed && touched && EDIT_TOOLS.has(hook.tool_name ?? '')) {
+        deps.fileTouched?.(terminalId, hook.tool_name ?? '', touched, hook.cwd);
       }
       if (failed && hook.error) {
         deps.appendActivity(terminalId, {

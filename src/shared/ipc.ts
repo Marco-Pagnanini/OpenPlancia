@@ -53,6 +53,14 @@ export const IpcChannels = {
   folderIndexChanged: 'plancia:folder:index-changed',
   /** main → renderer: a file of a folder panel changed outside the panel. */
   folderFileChanged: 'plancia:folder:file-changed',
+  codeFeed: 'plancia:code:feed',
+  codeRead: 'plancia:code:read',
+  codeWatch: 'plancia:code:watch',
+  codePick: 'plancia:code:pick',
+  /** main → renderer: Claude changed a file (the feed of the Code panels). */
+  codeFeedChanged: 'plancia:code:feed-changed',
+  /** main → renderer: a file shown by a Code panel changed on disk. */
+  codeFileChanged: 'plancia:code:file-changed',
   activityList: 'plancia:activity:list',
   /** main → renderer: an activity entry was added or updated. */
   activityEvent: 'plancia:activity:event',
@@ -183,6 +191,32 @@ export type ArchitectureWriteResult =
 
 export type ArchitectureUndoResult = MarkdownUndoResult;
 
+/** A file changed by Claude (from PostToolUse), for the Code panels (M7). */
+export interface CodeFeedEntry {
+  /** Relative to the project, with "/" separators. */
+  path: string;
+  /** Terminal whose Claude changed it last. */
+  terminalId: string;
+  /** Write, Edit, MultiEdit or NotebookEdit. */
+  tool: string;
+  /** ISO timestamp of the last change. */
+  at: string;
+  /** How many changes since the project was opened. */
+  edits: number;
+}
+
+export interface CodeFile {
+  path: string;
+  exists: boolean;
+  /** Empty when the file is missing, binary or too large. */
+  content: string;
+  /** Content at git HEAD; null when not a git repository or the file is new. */
+  head: string | null;
+  repo: boolean;
+  binary: boolean;
+  tooLarge: boolean;
+}
+
 /** A markdown file of a folder panel. */
 export interface FolderFile {
   /** Relative to the folder, with "/" separators. */
@@ -255,6 +289,16 @@ export interface PlanciaApi {
     onChanged(listener: (event: MarkdownChangedEvent) => void): () => void;
     /** Restores the content before Claude's last write. */
     undo(id: string): Promise<MarkdownUndoResult>;
+  };
+  code: {
+    feed(): Promise<CodeFeedEntry[]>;
+    read(path: string): Promise<CodeFile>;
+    /** The file a Code panel shows now (null = none): it is watched for changes. */
+    watch(id: string, path: string | null): void;
+    /** Native dialog to open any file of the project in a Code panel. */
+    pick(id: string): Promise<MarkdownCreateResult>;
+    onFeed(listener: (feed: CodeFeedEntry[]) => void): () => void;
+    onFileChanged(listener: (event: { path: string }) => void): () => void;
   };
   folder: {
     /** Shows the native folder dialog and creates the panel at `position`. */

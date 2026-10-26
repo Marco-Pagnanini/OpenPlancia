@@ -25,6 +25,7 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
   const attention: string[] = [];
   const sessions: string[] = [];
   let settled = 0;
+  const touched: string[] = [];
   const manifests: Record<'start' | 'prompt', string | null> = { start: null, prompt: null };
   const deny =
     "Accesso negato: il panel 'AGENTS.md' è collegato a questo terminale in sola lettura.";
@@ -44,6 +45,7 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
     manifest: async (_id, moment) => manifests[moment],
     checkFileWrite: async (_id, tool, input) =>
       tool === 'Edit' && input?.['file_path'] === '/repo/AGENTS.md' ? deny : null,
+    fileTouched: (_id, tool, path) => touched.push(`${tool} ${path}`),
   };
   const fire = (body: Record<string, unknown>) =>
     handleHook('term-1', { session_id: 'sess-1', cwd: ROOT, ...body }, deps);
@@ -54,12 +56,24 @@ function setup(overrides: Partial<TerminalPanel> = {}) {
     toolUpdates,
     attention,
     sessions,
+    touched,
     get: () => terminal,
     settled: () => settled,
   };
 }
 
 describe('handleHook', () => {
+  it('feeds the Code panel only with files Claude actually changed', async () => {
+    const t = setup();
+    const post = (event: string, tool: string, path: string) =>
+      t.fire({ hook_event_name: event, tool_name: tool, tool_input: { file_path: path } });
+    await post('PostToolUse', 'Edit', '/repo/src/a.ts');
+    await post('PostToolUse', 'Write', 'src/b.ts');
+    await post('PostToolUse', 'Read', '/repo/src/c.ts');
+    await post('PostToolUseFailure', 'Edit', '/repo/src/d.ts');
+    expect(t.touched).toEqual(['Edit /repo/src/a.ts', 'Write src/b.ts']);
+  });
+
   it('follows a full turn: prompt → tool → done → stop', async () => {
     const t = setup();
     expect(

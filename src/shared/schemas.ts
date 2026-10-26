@@ -136,6 +136,13 @@ export const boardIntentSchema = z.discriminatedUnion('type', [
   /** Arrow from `source` to `target` (spec §6). */
   z.object({ type: z.literal('connect'), source: z.string().min(1), target: z.string().min(1) }),
   z.object({ type: z.literal('disconnect'), ids: z.array(z.string()).min(1) }),
+  /** Code panel (M7): whose files it follows, and the file opened by hand (null = none). */
+  z.object({ type: z.literal('setCodeFollow'), id: z.string(), follow: codeFollowSchema }),
+  z.object({
+    type: z.literal('setCodePinned'),
+    id: z.string(),
+    pinnedFile: workspacePathSchema.nullable(),
+  }),
 ]);
 
 // Terminal IPC payloads (renderer → main).
@@ -167,6 +174,11 @@ export const MARKDOWN_MAX_CHARS = 2_000_000;
 export const markdownCreateSchema = z.object({
   mode: z.enum(['new', 'open']),
   position: positionSchema,
+});
+export const codeFileSchema = z.object({ path: workspacePathSchema });
+export const codeWatchSchema = z.object({
+  id: terminalIdSchema,
+  path: workspacePathSchema.nullable(),
 });
 export const folderCreateSchema = z.object({ position: positionSchema });
 /** A file of a folder panel, relative to the folder; checked again by FolderService. */

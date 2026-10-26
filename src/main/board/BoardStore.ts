@@ -231,6 +231,18 @@ export class BoardStore {
         const ids = new Set(intent.ids);
         return { ...board, connections: board.connections.filter((c) => !ids.has(c.id)) };
       }
+      case 'setCodeFollow':
+        return this.updatePanel(board, intent.id, (p) => {
+          if (p.type !== 'code') throw new BoardError(`Il panel ${p.id} non è un panel Codice`);
+          return { ...p, follow: intent.follow };
+        });
+      case 'setCodePinned':
+        return this.updatePanel(board, intent.id, (p) => {
+          if (p.type !== 'code') throw new BoardError(`Il panel ${p.id} non è un panel Codice`);
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { pinnedFile, ...rest } = p;
+          return intent.pinnedFile ? { ...rest, pinnedFile: intent.pinnedFile } : rest;
+        });
       case 'setTerminalMode': {
         const terminal = this.requireTerminal(board, intent.id);
         if (terminal.mode === intent.mode) return board;
