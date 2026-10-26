@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+*.log
+.DS_Store
+.eslintcache
