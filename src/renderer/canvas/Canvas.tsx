@@ -91,7 +91,7 @@ export function Canvas() {
   const onConnect = useCallback(
     async ({ source, target }: Connection) => {
       if (await dispatch({ type: 'connect', source, target })) {
-        showToast('Claude vedrà questo collegamento al prossimo messaggio o tool');
+        showToast('Claude vedrà questo collegamento al prossimo messaggio o tool', 'success');
       }
     },
     [dispatch, showToast],
@@ -102,7 +102,7 @@ export function Canvas() {
     (_event, state) => {
       if (!state.fromNode || !state.toNode || state.fromNode.id === state.toNode.id) return;
       const result = check(state.fromNode.id, state.toNode.id);
-      if (!result.ok) showToast(result.message);
+      if (!result.ok) showToast(result.message, 'warning');
     },
     [showToast],
   );
