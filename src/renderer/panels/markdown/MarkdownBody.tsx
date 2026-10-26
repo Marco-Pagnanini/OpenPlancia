@@ -166,7 +166,7 @@ export function MarkdownBody({
       {conflict && (
         <Notice tone="warning">
           <span className="min-w-0 basis-[calc(100%-24px)]">
-            Il file è cambiato fuori da Plancia mentre avevi modifiche non salvate.
+            Il file è cambiato fuori da OpenPlancia mentre avevi modifiche non salvate.
           </span>
           <button type="button" className={BAR_BUTTON} onClick={() => discardDraft(id)}>
             Usa la versione su disco

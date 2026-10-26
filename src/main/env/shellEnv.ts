@@ -6,12 +6,12 @@ export type Env = Record<string, string>;
 
 const RESOLVE_TIMEOUT_MS = 10_000;
 
-/** Variables that belong to Plancia itself, never to user terminals. */
+/** Variables that belong to OpenPlancia itself, never to user terminals. */
 const STRIPPED_PREFIXES = ['ELECTRON_', 'VITE_', 'PLANCIA_'];
 const STRIPPED_KEYS = ['CLAUDECODE', 'NODE_OPTIONS'];
 
 /**
- * Markers of a Claude Code session that launched Plancia (e.g. `npm run dev` from Claude Code).
+ * Markers of a Claude Code session that launched OpenPlancia (e.g. `npm run dev` from Claude Code).
  * Inherited by a terminal they make `claude` behave as a child session (no transcript, so no
  * --resume). They are removed before asking the login shell, so anything the user's dotfiles
  * set on purpose comes back.
@@ -95,7 +95,7 @@ export function loginShellEnv(): Promise<Env> {
   return cached;
 }
 
-/** Environment for a user terminal: login-shell env, minus Plancia internals, plus terminal info. */
+/** Environment for a user terminal: login-shell env, minus OpenPlancia internals, plus terminal info. */
 export function buildPtyEnv(source: Env, appVersion: string): Env {
   const env: Env = {};
   for (const [k, v] of Object.entries(source)) {
@@ -104,7 +104,7 @@ export function buildPtyEnv(source: Env, appVersion: string): Env {
   }
   env['TERM'] = 'xterm-256color';
   env['COLORTERM'] = 'truecolor';
-  env['TERM_PROGRAM'] = 'Plancia';
+  env['TERM_PROGRAM'] = 'OpenPlancia';
   env['TERM_PROGRAM_VERSION'] = appVersion;
   env['LANG'] ??= 'en_US.UTF-8';
   return env;

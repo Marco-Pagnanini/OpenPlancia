@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* Design tokens from the Plancia design (warm dark, orange accent). */
+/* Design tokens from the OpenPlancia design (warm dark, orange accent). */
 @theme {
   --font-sans: 'Geist Variable', system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, monospace;

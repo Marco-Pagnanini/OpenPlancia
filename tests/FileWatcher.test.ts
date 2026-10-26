@@ -33,7 +33,7 @@ describe('FileWatcher', () => {
     await writeFile(watched, 'b');
     await vi.waitFor(() => expect(events).toContainEqual([watched, 'change']), { timeout: 3000 });
 
-    // Editors and Plancia save via temp file + rename.
+    // Editors and OpenPlancia save via temp file + rename.
     events.length = 0;
     await writeFile(`${watched}.tmp`, 'c');
     await rename(`${watched}.tmp`, watched);

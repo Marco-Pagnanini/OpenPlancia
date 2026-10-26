@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Bridge for hook events that only support `type: "command"` (SessionStart):
-// reads the event JSON from stdin, POSTs it to Plancia and prints the reply on stdout.
-// Always exits 0 so a Plancia problem never blocks Claude Code.
+// reads the event JSON from stdin, POSTs it to OpenPlancia and prints the reply on stdout.
+// Always exits 0 so a OpenPlancia problem never blocks Claude Code.
 'use strict';
 const http = require('node:http');
 

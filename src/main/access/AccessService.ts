@@ -24,7 +24,7 @@ export function deniedMessage(title: string, access: Access, needed: 'read' | 'w
 }
 
 export const PLANCIA_DIR_DENIED =
-  'Scrittura negata: i file in .plancia/ sono gestiti da Plancia. Le architetture si modificano solo con mcp__plancia__write_panel, che le valida.';
+  'Scrittura negata: i file in .plancia/ sono gestiti da OpenPlancia. Le architetture si modificano solo con mcp__plancia__write_panel, che le valida.';
 
 export type WriteDecision =
   | { decision: 'none' }

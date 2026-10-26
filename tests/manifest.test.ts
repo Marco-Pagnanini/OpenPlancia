@@ -31,7 +31,7 @@ describe('renderManifest', () => {
   it('follows the spec format, with readable content inline', () => {
     expect(renderManifest([agents, backend])).toBe(
       [
-        'Plancia — panel collegati a questa sessione:',
+        'OpenPlancia — panel collegati a questa sessione:',
         '- md-3f2a "AGENTS.md" (markdown, file AGENTS.md) · accesso: lettura · versione 7',
         '- arch-91c0 "Backend v1" (architecture) · accesso: lettura e scrittura · versione 3',
         'I contenuti si leggono con mcp__plancia__read_panel e si modificano con mcp__plancia__write_panel.',
@@ -69,7 +69,7 @@ describe('renderManifest', () => {
 
   it('opens with what changed when given changes', () => {
     expect(renderManifest([agents], ['AGENTS.md (v6 → v7)'])).toMatch(
-      /^Modificato dall'ultimo messaggio: AGENTS\.md \(v6 → v7\)\n\nPlancia — panel collegati/,
+      /^Modificato dall'ultimo messaggio: AGENTS\.md \(v6 → v7\)\n\nOpenPlancia — panel collegati/,
     );
   });
 
@@ -133,7 +133,7 @@ describe('ManifestTracker (injection only on change)', () => {
     expect(tracker.prompt('t1', [])).toBeNull();
   });
 
-  it('treats a terminal it never saw start (Plancia restarted) as starting from nothing', () => {
+  it('treats a terminal it never saw start (OpenPlancia restarted) as starting from nothing', () => {
     const tracker = new ManifestTracker();
     expect(tracker.prompt('t1', [agents])).toContain('nuova connessione: AGENTS.md (lettura)');
   });

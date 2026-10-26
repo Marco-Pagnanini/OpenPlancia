@@ -25,6 +25,9 @@ const api: PlanciaApi = {
     openDialog: () => ipcRenderer.invoke(IpcChannels.workspaceOpenDialog),
     onState: (listener) =>
       subscribe<WorkspaceSnapshot | null>(IpcChannels.workspaceState, listener),
+    close: () => ipcRenderer.invoke(IpcChannels.workspaceClose),
+    recent: () => ipcRenderer.invoke(IpcChannels.workspaceRecent),
+    openRecent: (path) => ipcRenderer.invoke(IpcChannels.workspaceOpenRecent, { path }),
   },
   board: {
     dispatch: (intent) => ipcRenderer.invoke(IpcChannels.boardDispatch, intent),

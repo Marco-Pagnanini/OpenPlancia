@@ -151,7 +151,7 @@ describe('plancia-hook.cjs', () => {
     expect(hooks).toEqual([['term-1', { hook_event_name: 'SessionStart' }]]);
   });
 
-  it('exits 0 silently when Plancia is not reachable', async () => {
+  it('exits 0 silently when OpenPlancia is not reachable', async () => {
     const res = await run('http://127.0.0.1:9/hooks/x/y', '{}');
     expect(res).toEqual({ code: 0, out: '' });
   });

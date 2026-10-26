@@ -43,7 +43,7 @@ export function ManifestModal() {
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-[13.5px] font-semibold">Cosa vede Claude</span>
             <span className="truncate font-mono text-[11.5px] text-ink-3">
-              {title} · contesto iniettato da Plancia
+              {title} · contesto iniettato da OpenPlancia
               {text ? ` · ${text.length} caratteri · ~${estimateTokens(text.length)} token` : ''}
             </span>
           </div>
@@ -68,7 +68,7 @@ export function ManifestModal() {
           {text === null
             ? 'Caricamento…'
             : text === ''
-              ? 'Nessun panel collegato: Plancia non aggiunge contesto a questa sessione.'
+              ? 'Nessun panel collegato: OpenPlancia non aggiunge contesto a questa sessione.'
               : text}
         </pre>
         <p className="border-t border-line-soft px-4 py-2.5 text-[11.5px] text-pretty text-ink-4">

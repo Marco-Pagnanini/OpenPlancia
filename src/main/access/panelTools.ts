@@ -16,7 +16,7 @@ export interface PanelToolsDeps {
 }
 
 const NOT_YET =
-  'I panel Architettura saranno leggibili e scrivibili da Claude con la prossima versione di Plancia.';
+  'I panel Architettura saranno leggibili e scrivibili da Claude con la prossima versione di OpenPlancia.';
 
 /** Implementation of the plancia MCP tools (spec §7.3). Every call checks the arrows anew. */
 export class PanelTools {

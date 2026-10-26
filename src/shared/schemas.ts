@@ -171,10 +171,14 @@ export const externalUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const appSettingsSchema = z.object({
   lastWorkspace: z.string().optional(),
+  /** Most recent first, shown on the home screen. */
+  recentWorkspaces: z.array(z.string()).max(20).optional(),
 });
 
+export const workspacePathPayloadSchema = z.object({ path: z.string().min(1).max(4096) });
+
 /**
- * Body of a Claude Code hook request. Only the fields Plancia reads are listed; everything else
+ * Body of a Claude Code hook request. Only the fields OpenPlancia reads are listed; everything else
  * passes through. See https://code.claude.com/docs/en/hooks.
  */
 export const hookPayloadSchema = z.looseObject({

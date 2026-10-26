@@ -27,6 +27,9 @@ interface WorkspaceState {
   edges: WireEdge[];
   init(): () => void;
   openFolder(): Promise<void>;
+  /** Back to the home screen; asks first if terminals would be closed. */
+  goHome(): Promise<void>;
+  openRecent(path: string): Promise<void>;
   dispatch(intent: BoardIntent): Promise<boolean>;
   applyNodeChanges(changes: NodeChange<PanelNode>[]): void;
   applyEdgeChanges(changes: EdgeChange<WireEdge>[]): void;
@@ -127,6 +130,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async openFolder() {
       const result = await window.plancia.workspace.openDialog();
+      if (result.status === 'error') set({ error: result.message });
+    },
+
+    async goHome() {
+      const live = (get().snapshot?.board.panels ?? []).filter(
+        (p) => p.type === 'terminal' && p.status !== 'not-started' && p.status !== 'exited',
+      );
+      const what = live.length === 1 ? 'il terminale aperto' : `i ${live.length} terminali aperti`;
+      if (
+        live.length > 0 &&
+        !window.confirm(
+          `Tornare alla schermata iniziale chiude ${what} in questa lavagna. Continuare?`,
+        )
+      ) {
+        return;
+      }
+      await window.plancia.workspace.close();
+    },
+
+    async openRecent(path) {
+      const result = await window.plancia.workspace.openRecent(path);
       if (result.status === 'error') set({ error: result.message });
     },
 
