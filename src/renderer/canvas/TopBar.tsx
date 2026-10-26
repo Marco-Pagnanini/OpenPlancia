@@ -1,15 +1,20 @@
 import { TerminalWindowIcon } from '@phosphor-icons/react';
 import { Logo } from '../components/Logo';
+import { useTerminalStore } from '../stores/terminalStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 
 function AgentsPill() {
   const panels = useWorkspaceStore((s) => s.snapshot?.board.panels);
   const agents = panels?.filter((p) => p.type === 'terminal' && p.mode === 'claude') ?? [];
+  const appInfo = useTerminalStore((s) => s.appInfo);
   const busy = agents.some(
     (p) => p.type === 'terminal' && (p.status === 'working' || p.status === 'needs-input'),
   );
   return (
-    <span className="flex items-center gap-2 rounded-[10px] border border-line bg-chrome px-3 py-[7px] text-[12.5px] text-ink-2">
+    <span
+      title={appInfo ? (appInfo.claudeVersion ?? 'Claude Code non trovato nel PATH') : undefined}
+      className="flex items-center gap-2 rounded-[10px] border border-line bg-chrome px-3 py-[7px] text-[12.5px] text-ink-2"
+    >
       {busy && <span className="size-[7px] animate-pulse-dot rounded-full bg-accent" />}
       <TerminalWindowIcon size={14} className="text-ink-3" />
       {agents.length} {agents.length === 1 ? 'agente' : 'agenti'}

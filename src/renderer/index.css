@@ -87,3 +87,10 @@ body {
     transition: none !important;
   }
 }
+
+/* xterm inside panels */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}

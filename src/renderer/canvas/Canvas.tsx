@@ -8,8 +8,10 @@ import {
 } from '@xyflow/react';
 import { useCallback, useState } from 'react';
 import { PanelNodeComponent } from '../panels/PanelNode';
+import { confirmDelete } from '../panels/panelMeta';
 import { useUiStore } from '../stores/uiStore';
 import { useWorkspaceStore, type PanelNode } from '../stores/workspaceStore';
+import { FocusOverlay } from './FocusOverlay';
 import { TOOL_HINTS } from './tools';
 import { ToolRail } from './ToolRail';
 import { TopBar } from './TopBar';
@@ -66,6 +68,9 @@ export function Canvas() {
         onNodesChange={applyChanges}
         onNodeDragStop={onNodeDragStop}
         onNodesDelete={onNodesDelete}
+        onBeforeDelete={({ nodes: doomed }) =>
+          Promise.resolve(confirmDelete(doomed.map((n) => n.data.panel)))
+        }
         onMoveEnd={(_event, viewport) => void dispatch({ type: 'setViewport', viewport })}
         {...(initialViewport ? { defaultViewport: initialViewport } : { fitView: true })}
         fitViewOptions={{ maxZoom: 1 }}
@@ -100,6 +105,7 @@ export function Canvas() {
       <ToolRail />
       <ZoomControls />
       <Hint />
+      <FocusOverlay />
     </div>
   );
 }

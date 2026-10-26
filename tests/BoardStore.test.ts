@@ -172,6 +172,42 @@ describe('BoardStore', () => {
   });
 });
 
+describe('terminal runtime state', () => {
+  function withTerminal() {
+    const store = makeStore();
+    store.apply({ type: 'createPanel', panelType: 'terminal', position: at });
+    return { store, id: store.getBoard().panels[0]!.id };
+  }
+
+  it('updates status as a runtime change and skips no-ops', () => {
+    const { store, id } = withTerminal();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.setTerminalStatus(id, 'idle');
+    store.setTerminalStatus(id, 'idle');
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]![1]).toEqual({ type: 'terminalStatus', id, status: 'idle' });
+  });
+
+  it('switches a shell to claude dropping any previous session', () => {
+    const { store, id } = withTerminal();
+    store.setClaudeSessionId(id, '7c9e6679-7425-40de-944b-e07fc1f90ae7');
+    store.setTerminalStatus(id, 'exited');
+    store.apply({ type: 'setTerminalMode', id, mode: 'claude' });
+    const panel = store.getBoard().panels[0] as TerminalPanel;
+    expect(panel).toMatchObject({ mode: 'claude', status: 'not-started' });
+    expect(panel.claudeSessionId).toBeUndefined();
+  });
+
+  it('refuses terminal operations on other panels', () => {
+    const store = makeStore();
+    store.apply({ type: 'createPanel', panelType: 'code', position: at });
+    const id = store.getBoard().panels[0]!.id;
+    expect(() => store.setTerminalStatus(id, 'idle')).toThrow(BoardError);
+    expect(() => store.apply({ type: 'setTerminalMode', id, mode: 'claude' })).toThrow(BoardError);
+  });
+});
+
 describe('persistence mapping', () => {
   it('strips runtime status and round-trips through the schema', () => {
     const store = makeStore();

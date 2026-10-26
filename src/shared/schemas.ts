@@ -112,7 +112,30 @@ export const boardIntentSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('duplicatePanel'), id: z.string() }),
   z.object({ type: z.literal('deletePanels'), ids: z.array(z.string()).min(1) }),
   z.object({ type: z.literal('setViewport'), viewport: viewportSchema }),
+  z.object({ type: z.literal('setTerminalMode'), id: z.string(), mode: terminalModeSchema }),
 ]);
+
+// Terminal IPC payloads (renderer → main).
+const terminalIdSchema = z.string().min(1).max(64);
+const dimension = z.number().int().min(1).max(1000);
+
+export const terminalStartSchema = z.object({
+  id: terminalIdSchema,
+  resume: z.boolean(),
+  cols: dimension,
+  rows: dimension,
+});
+export const terminalWriteSchema = z.object({
+  id: terminalIdSchema,
+  data: z.string().max(1_000_000),
+});
+export const terminalResizeSchema = z.object({
+  id: terminalIdSchema,
+  cols: dimension,
+  rows: dimension,
+});
+export const terminalIdPayloadSchema = z.object({ id: terminalIdSchema });
+export const externalUrlSchema = z.url({ protocol: /^https?$/ });
 
 export const appSettingsSchema = z.object({
   lastWorkspace: z.string().optional(),

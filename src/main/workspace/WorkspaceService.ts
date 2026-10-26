@@ -3,8 +3,8 @@ import { basename } from 'node:path';
 import { z } from 'zod';
 import type { DispatchResult } from '@shared/ipc';
 import { boardIntentSchema } from '@shared/schemas';
-import type { WorkspaceSnapshot } from '@shared/types';
-import { BoardStore, fromPersisted, toPersisted } from '../board/BoardStore';
+import type { AgentStatus, Panel, WorkspaceSnapshot } from '@shared/types';
+import { BoardStore, fromPersisted, toPersisted, type BoardChange } from '../board/BoardStore';
 import { loadSettings, saveSettings } from '../settings/AppSettings';
 import { createDebouncedTask, type DebouncedTask } from '../util/debounce';
 import { readBoardFile, writeBoardFile } from './boardFile';
@@ -14,6 +14,8 @@ export interface WorkspaceServiceOptions {
   onState: (snapshot: WorkspaceSnapshot | null) => void;
   saveDelayMs?: number;
 }
+
+export type WorkspaceChangeListener = (change: BoardChange, panels: Panel[]) => void;
 
 interface OpenWorkspace {
   root: string;
@@ -26,8 +28,38 @@ interface OpenWorkspace {
 /** Owns the open project folder: loads its board, persists changes, remembers the last one. */
 export class WorkspaceService {
   private current: OpenWorkspace | null = null;
+  private readonly changeListeners = new Set<WorkspaceChangeListener>();
+  private readonly closeListeners = new Set<() => Promise<void> | void>();
 
   constructor(private readonly options: WorkspaceServiceOptions) {}
+
+  root(): string | null {
+    return this.current?.root ?? null;
+  }
+
+  getPanel(id: string): Panel | undefined {
+    return this.current?.store.getBoard().panels.find((p) => p.id === id);
+  }
+
+  /** Board changes of the open workspace, after they are applied. */
+  onChange(listener: WorkspaceChangeListener): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  /** Runs (and is awaited) before a workspace is closed or replaced. */
+  onBeforeClose(listener: () => Promise<void> | void): () => void {
+    this.closeListeners.add(listener);
+    return () => this.closeListeners.delete(listener);
+  }
+
+  setTerminalStatus(id: string, status: AgentStatus): void {
+    if (this.getPanel(id)) this.current?.store.setTerminalStatus(id, status);
+  }
+
+  setClaudeSessionId(id: string, sessionId: string): void {
+    this.current?.store.setClaudeSessionId(id, sessionId);
+  }
 
   snapshot(): WorkspaceSnapshot | null {
     const ws = this.current;
@@ -52,10 +84,11 @@ export class WorkspaceService {
       this.options.saveDelayMs ?? 500,
       (err) => console.error('[workspace] salvataggio di board.json fallito', err),
     );
-    const unsubscribe = store.subscribe((_board, intent) => {
-      saver.schedule();
+    const unsubscribe = store.subscribe((board, change) => {
+      if (change.type !== 'terminalStatus') saver.schedule();
       // The renderer already shows its own viewport; echoing it back is wasted work.
-      if (intent.type !== 'setViewport') this.emit();
+      if (change.type !== 'setViewport') this.emit();
+      for (const listener of this.changeListeners) listener(change, board.panels);
     });
     this.current = { root, name: basename(root), store, saver, unsubscribe };
 
@@ -99,6 +132,7 @@ export class WorkspaceService {
   async close({ notify = true }: { notify?: boolean } = {}): Promise<void> {
     const ws = this.current;
     if (!ws) return;
+    for (const listener of this.closeListeners) await listener();
     ws.unsubscribe();
     await ws.saver.flush();
     this.current = null;

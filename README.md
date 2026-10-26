@@ -30,6 +30,11 @@ Lavagna infinita per sviluppatori: panel (terminali Claude Code, markdown, archi
 ## Limiti noti
 
 - Le modifiche ai file fatte da Claude tramite `Bash` non sono intercettabili in modo affidabile (vedi spec §7.5).
+- Con lo zoom della lavagna diverso dal 100% la selezione col mouse nei terminali può non coincidere col testo: usa la modalità focus (doppio clic sull'header).
+
+## Sviluppo
+
+- `PLANCIA_USER_DATA=/percorso npm run dev` usa una cartella dati separata (impostazioni, ultima cartella aperta), per provare senza toccare la propria. È ignorata nell'app pacchettizzata.
 
 ## Problemi noti
 

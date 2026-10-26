@@ -1,20 +1,36 @@
-import { DotsThreeIcon, XIcon } from '@phosphor-icons/react';
+import { CornersOutIcon, DotsThreeIcon, XIcon } from '@phosphor-icons/react';
 import { memo, useState, type FocusEvent, type KeyboardEvent } from 'react';
-import { NodeResizer, type NodeProps } from '@xyflow/react';
+import { NodeResizer, useStore, type NodeProps } from '@xyflow/react';
 import { MIN_PANEL_SIZE } from '@shared/panels';
 import type { Panel } from '@shared/types';
 import { useUiStore } from '../stores/uiStore';
 import { PANEL_DRAG_HANDLE, useWorkspaceStore, type PanelNode } from '../stores/workspaceStore';
 import { PanelIcon } from './PanelIcon';
 import { PanelPlaceholder } from './PanelPlaceholder';
-import { STATUS_LABEL, panelKindLabel } from './panelMeta';
+import { confirmDelete, panelKindLabel } from './panelMeta';
+import { StatusBadge } from './StatusBadge';
+import { TerminalBody } from './terminal/TerminalBody';
+import { TerminalPreview } from './terminal/TerminalPreview';
+
+/** Below this zoom terminals show a plain-text preview instead of xterm (spec §8.1). */
+const LOW_ZOOM = 0.6;
 
 const ICON_BUTTON =
   'nodrag grid size-6 place-items-center rounded-md text-ink-5 hover:bg-line-soft hover:text-ink';
 
-function PanelMenu({ id, onRename }: { id: string; onRename: () => void }) {
+function deletePanel(panel: Panel) {
+  if (confirmDelete([panel])) {
+    void useWorkspaceStore.getState().dispatch({ type: 'deletePanels', ids: [panel.id] });
+  }
+}
+
+function PanelMenu({ panel, onRename }: { panel: Panel; onRename: () => void }) {
   const dispatch = useWorkspaceStore((s) => s.dispatch);
+  const setFocus = useUiStore((s) => s.setFocus);
   const [open, setOpen] = useState(false);
+  const { id } = panel;
+  const running =
+    panel.type === 'terminal' && panel.status !== 'not-started' && panel.status !== 'exited';
 
   const close = (e: FocusEvent<HTMLDivElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
@@ -25,6 +41,12 @@ function PanelMenu({ id, onRename }: { id: string; onRename: () => void }) {
   };
   const base = 'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px]';
   const item = `${base} text-ink-2 hover:bg-hover hover:text-ink`;
+
+  const convertToClaude = () => {
+    if (running && !window.confirm('La shell verrà chiusa e al suo posto partirà Claude Code.'))
+      return;
+    void dispatch({ type: 'setTerminalMode', id, mode: 'claude' });
+  };
 
   return (
     <div className="relative" onBlur={close}>
@@ -40,8 +62,11 @@ function PanelMenu({ id, onRename }: { id: string; onRename: () => void }) {
       {open && (
         <div
           role="menu"
-          className="nodrag absolute top-7 right-0 z-10 w-40 rounded-[10px] border border-line-strong bg-chrome p-1 shadow-[0_24px_60px_rgba(0,0,0,.55)]"
+          className="nodrag absolute top-7 right-0 z-10 w-44 rounded-[10px] border border-line-strong bg-chrome p-1 shadow-[0_24px_60px_rgba(0,0,0,.55)]"
         >
+          <button type="button" role="menuitem" className={item} onClick={run(() => setFocus(id))}>
+            Modalità focus
+          </button>
           <button type="button" role="menuitem" className={item} onClick={run(onRename)}>
             Rinomina
           </button>
@@ -53,12 +78,37 @@ function PanelMenu({ id, onRename }: { id: string; onRename: () => void }) {
           >
             Duplica
           </button>
+          {panel.type === 'terminal' && (
+            <>
+              <div className="mx-1 my-1 h-px bg-line-soft" />
+              {panel.mode === 'shell' && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  onClick={run(convertToClaude)}
+                >
+                  Converti in Claude
+                </button>
+              )}
+              {running && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  onClick={run(() => void window.plancia.terminal.stop(id))}
+                >
+                  Ferma processo
+                </button>
+              )}
+            </>
+          )}
           <div className="mx-1 my-1 h-px bg-line-soft" />
           <button
             type="button"
             role="menuitem"
             className={`${base} text-danger hover:bg-accent/12`}
-            onClick={run(() => void dispatch({ type: 'deletePanels', ids: [id] }))}
+            onClick={run(() => deletePanel(panel))}
           >
             Elimina
           </button>
@@ -82,30 +132,29 @@ function TitleEditor({ title, onDone }: { title: string; onDone: (next: string |
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={onKeyDown}
       onBlur={() => onDone(value)}
+      onDoubleClick={(e) => e.stopPropagation()}
       className="nodrag min-w-0 flex-1 rounded-md bg-canvas px-1.5 py-0.5 font-mono text-[12.5px] text-ink outline-none ring-1 ring-accent"
     />
   );
 }
 
-function StatusBadge({ panel }: { panel: Panel }) {
-  if (panel.type !== 'terminal') return null;
-  const live = panel.status === 'working';
-  return (
-    <span
-      className={`flex shrink-0 items-center gap-1.5 rounded-full px-[9px] py-[3px] text-[11px] whitespace-nowrap ${
-        live ? 'bg-accent/13 text-accent-soft' : 'bg-hover text-ink-3'
-      }`}
-    >
-      {live && <span className="size-1.5 animate-pulse-dot rounded-full bg-accent" />}
-      {STATUS_LABEL[panel.status]}
-    </span>
-  );
+export function PanelContent({ panel, variant }: { panel: Panel; variant: 'panel' | 'focus' }) {
+  const lowZoom = useStore((s) => s.transform[2] < LOW_ZOOM);
+  if (panel.type === 'terminal') {
+    return variant === 'panel' && lowZoom ? (
+      <TerminalPreview panel={panel} />
+    ) : (
+      <TerminalBody panel={panel} variant={variant} />
+    );
+  }
+  return <PanelPlaceholder panel={panel} />;
 }
 
 function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
   const { panel } = data;
   const dispatch = useWorkspaceStore((s) => s.dispatch);
   const hand = useUiStore((s) => s.tool === 'hand');
+  const setFocus = useUiStore((s) => s.setFocus);
   const [renaming, setRenaming] = useState(false);
 
   const finishRename = (next: string | null) => {
@@ -144,6 +193,8 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
         }
       />
       <header
+        onDoubleClick={() => setFocus(id)}
+        title="Doppio clic per la modalità focus"
         className={`${PANEL_DRAG_HANDLE} flex h-9 shrink-0 items-center gap-2 rounded-t-[11px] border-b border-line-soft bg-panel-head pr-2 pl-3 ${
           hand ? '' : 'cursor-grab active:cursor-grabbing'
         }`}
@@ -168,12 +219,21 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
           </>
         )}
         <StatusBadge panel={panel} />
-        <PanelMenu id={id} onRename={() => setRenaming(true)} />
+        <button
+          type="button"
+          aria-label="Modalità focus"
+          title="Modalità focus"
+          onClick={() => setFocus(id)}
+          className={ICON_BUTTON}
+        >
+          <CornersOutIcon size={13} />
+        </button>
+        <PanelMenu panel={panel} onRename={() => setRenaming(true)} />
         <button
           type="button"
           aria-label="Chiudi panel"
           title="Chiudi panel"
-          onClick={() => void dispatch({ type: 'deletePanels', ids: [id] })}
+          onClick={() => deletePanel(panel)}
           className={ICON_BUTTON}
         >
           <XIcon size={13} />
@@ -181,9 +241,9 @@ function PanelNodeView({ id, data, selected }: NodeProps<PanelNode>) {
       </header>
       {/* In hand mode the body must let the pan gesture through. */}
       <div
-        className={`${hand ? '' : 'nodrag nowheel nopan'} min-h-0 flex-1 overflow-auto rounded-b-[11px]`}
+        className={`${hand ? '' : 'nodrag nowheel nopan'} min-h-0 flex-1 overflow-hidden rounded-b-[11px]`}
       >
-        <PanelPlaceholder panel={panel} />
+        <PanelContent panel={panel} variant="panel" />
       </div>
     </div>
   );

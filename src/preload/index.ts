@@ -1,6 +1,18 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import { IpcChannels, type PlanciaApi } from '@shared/ipc';
+import {
+  IpcChannels,
+  type PlanciaApi,
+  type TerminalDataEvent,
+  type TerminalErrorEvent,
+  type TerminalExitEvent,
+} from '@shared/ipc';
 import type { WorkspaceSnapshot } from '@shared/types';
+
+function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
+  const handler = (_event: IpcRendererEvent, payload: T) => listener(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
 
 // Keep this surface minimal: only typed, intent-level calls, never raw ipcRenderer.
 const api: PlanciaApi = {
@@ -8,15 +20,25 @@ const api: PlanciaApi = {
   workspace: {
     get: () => ipcRenderer.invoke(IpcChannels.workspaceGet),
     openDialog: () => ipcRenderer.invoke(IpcChannels.workspaceOpenDialog),
-    onState: (listener) => {
-      const handler = (_event: IpcRendererEvent, snapshot: WorkspaceSnapshot | null) =>
-        listener(snapshot);
-      ipcRenderer.on(IpcChannels.workspaceState, handler);
-      return () => ipcRenderer.removeListener(IpcChannels.workspaceState, handler);
-    },
+    onState: (listener) =>
+      subscribe<WorkspaceSnapshot | null>(IpcChannels.workspaceState, listener),
   },
   board: {
     dispatch: (intent) => ipcRenderer.invoke(IpcChannels.boardDispatch, intent),
+  },
+  app: {
+    info: () => ipcRenderer.invoke(IpcChannels.appInfo),
+    openExternal: (url) => ipcRenderer.invoke(IpcChannels.openExternal, url),
+  },
+  terminal: {
+    start: (request) => ipcRenderer.invoke(IpcChannels.terminalStart, request),
+    stop: (id) => ipcRenderer.invoke(IpcChannels.terminalStop, { id }),
+    snapshot: (id) => ipcRenderer.invoke(IpcChannels.terminalSnapshot, { id }),
+    write: (id, data) => ipcRenderer.send(IpcChannels.terminalWrite, { id, data }),
+    resize: (id, cols, rows) => ipcRenderer.send(IpcChannels.terminalResize, { id, cols, rows }),
+    onData: (listener) => subscribe<TerminalDataEvent>(IpcChannels.terminalData, listener),
+    onExit: (listener) => subscribe<TerminalExitEvent>(IpcChannels.terminalExit, listener),
+    onError: (listener) => subscribe<TerminalErrorEvent>(IpcChannels.terminalError, listener),
   },
 };
 

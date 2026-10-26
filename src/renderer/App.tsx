@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Canvas } from './canvas/Canvas';
 import { EmptyState } from './components/EmptyState';
 import { ErrorToast } from './components/ErrorToast';
+import { useTerminalStore } from './stores/terminalStore';
 import { useWorkspaceStore } from './stores/workspaceStore';
 
 export function App() {
@@ -11,6 +12,7 @@ export function App() {
   const init = useWorkspaceStore((s) => s.init);
 
   useEffect(() => init(), [init]);
+  useEffect(() => useTerminalStore.getState().init(), []);
 
   if (!loaded) return null;
 

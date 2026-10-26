@@ -14,10 +14,40 @@ export function panelKindLabel(panel: Panel): string {
   }
 }
 
-export const STATUS_LABEL: Record<AgentStatus, string> = {
+const CLAUDE_STATUS: Record<AgentStatus, string> = {
   'not-started': 'non avviato',
   idle: 'in attesa',
   working: 'al lavoro',
   'needs-input': 'richiede input',
   exited: 'terminato',
 };
+
+const SHELL_STATUS: Record<AgentStatus, string> = {
+  ...CLAUDE_STATUS,
+  idle: 'attivo',
+  working: 'attivo',
+};
+
+export function statusLabel(mode: 'shell' | 'claude', status: AgentStatus): string {
+  return (mode === 'claude' ? CLAUDE_STATUS : SHELL_STATUS)[status];
+}
+
+/**
+ * Asks before deleting panels that would kill a running process. The spec asks for this when
+ * Claude is working; any live terminal gets it, since Backspace on a selected panel deletes it.
+ */
+export function confirmDelete(panels: Panel[]): boolean {
+  const live = panels.filter(
+    (p) => p.type === 'terminal' && p.status !== 'not-started' && p.status !== 'exited',
+  );
+  if (live.length === 0) return true;
+  const names = live.map((p) => `«${p.title}»`).join(', ');
+  const busy = live.some(
+    (p) => p.type === 'terminal' && (p.status === 'working' || p.status === 'needs-input'),
+  );
+  return window.confirm(
+    busy
+      ? `Claude sta lavorando in ${names}. Eliminare e chiudere il processo?`
+      : `${names} ha un processo in esecuzione. Eliminare il panel e chiudere il processo?`,
+  );
+}

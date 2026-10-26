@@ -1,6 +1,7 @@
 import { applyNodeChanges, type Node, type NodeChange } from '@xyflow/react';
 import { create } from 'zustand';
 import type { BoardIntent, Panel, WorkspaceSnapshot } from '@shared/types';
+import { terminalRegistry } from '../panels/terminal/terminalRegistry';
 
 export type PanelNode = Node<{ panel: Panel }, 'panel'>;
 
@@ -41,12 +42,16 @@ function toNodes(panels: Panel[], previous: PanelNode[]): PanelNode[] {
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
-  const receive = (snapshot: WorkspaceSnapshot | null) =>
+  const receive = (snapshot: WorkspaceSnapshot | null) => {
+    terminalRegistry.retain(
+      new Set(snapshot?.board.panels.filter((p) => p.type === 'terminal').map((p) => p.id)),
+    );
     set((state) => ({
       snapshot,
       loaded: true,
       nodes: snapshot ? toNodes(snapshot.board.panels, state.nodes) : [],
     }));
+  };
 
   return {
     snapshot: null,

@@ -1,11 +1,27 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { IpcChannels, type OpenWorkspaceResult } from '@shared/ipc';
+import { IpcChannels, type AppInfo, type OpenWorkspaceResult } from '@shared/ipc';
+import {
+  externalUrlSchema,
+  terminalIdPayloadSchema,
+  terminalResizeSchema,
+  terminalStartSchema,
+  terminalWriteSchema,
+} from '@shared/schemas';
 import type { WorkspaceSnapshot } from '@shared/types';
+import { CLAUDE_INSTALL_URL, claudeVersion, findClaude } from './claude/ClaudeLauncher';
+import { buildPtyEnv, loginShellEnv } from './env/shellEnv';
 import { handlePing } from './ipc/ping';
+import { nodePtySpawn } from './pty/nodePtySpawn';
+import { PtyService } from './pty/PtyService';
+import { TerminalService } from './terminal/TerminalService';
 import { WorkspaceService } from './workspace/WorkspaceService';
 
 const isDev = !app.isPackaged && process.env['ELECTRON_RENDERER_URL'] !== undefined;
+
+// Development only: a separate profile, so manual tests do not touch the real settings.
+const devUserData = process.env['PLANCIA_USER_DATA'];
+if (!app.isPackaged && devUserData) app.setPath('userData', devUserData);
 
 const iconPath = app.isPackaged
   ? join(process.resourcesPath, 'resources', 'icon.png')
@@ -17,13 +33,47 @@ function windowTitle(snapshot: WorkspaceSnapshot | null): string {
   return snapshot ? `${snapshot.name} — Plancia` : 'Plancia';
 }
 
+function send(channel: string, payload: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
 const workspace = new WorkspaceService({
   settingsFile: join(app.getPath('userData'), 'settings.json'),
   onState: (snapshot) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setTitle(windowTitle(snapshot));
-    mainWindow.webContents.send(IpcChannels.workspaceState, snapshot);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitle(windowTitle(snapshot));
+    send(IpcChannels.workspaceState, snapshot);
   },
+});
+
+const ptyEnv = () => loginShellEnv().then((env) => buildPtyEnv(env, app.getVersion()));
+
+const pty = new PtyService({
+  spawn: nodePtySpawn,
+  onData: (id, data, start) => send(IpcChannels.terminalData, { id, data, start }),
+  onExit: (id, exitCode, signal) => {
+    terminals.handleExit(id);
+    send(IpcChannels.terminalExit, { id, exitCode, signal });
+  },
+});
+
+const terminals: TerminalService = new TerminalService({
+  workspace,
+  pty,
+  env: ptyEnv,
+  findClaude,
+  onError: (id, code, message) => send(IpcChannels.terminalError, { id, code, message }),
+});
+
+// Detected once at startup (spec §7.1); shown in the UI.
+const appInfo: Promise<AppInfo> = ptyEnv().then(async (env) => {
+  const claudePath = await findClaude(env);
+  const version = claudePath ? await claudeVersion(claudePath, env) : null;
+  console.log(`[claude] ${version ?? 'non trovato'}${claudePath ? ` (${claudePath})` : ''}`);
+  return {
+    platform: process.platform,
+    claudeVersion: version,
+    claudeInstallUrl: CLAUDE_INSTALL_URL,
+  };
 });
 
 function createWindow(): BrowserWindow {
@@ -106,6 +156,37 @@ function registerIpc(): void {
   ipcMain.handle(IpcChannels.boardDispatch, (_event, intent: unknown) =>
     workspace.dispatch(intent),
   );
+
+  ipcMain.handle(IpcChannels.appInfo, () => appInfo);
+  ipcMain.handle(IpcChannels.openExternal, async (_event, url: unknown) => {
+    const parsed = externalUrlSchema.safeParse(url);
+    if (parsed.success) await shell.openExternal(parsed.data);
+  });
+
+  ipcMain.handle(IpcChannels.terminalStart, (_event, payload: unknown) => {
+    const parsed = terminalStartSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid', message: 'Richiesta non valida' } as const;
+    }
+    const { id, ...rest } = parsed.data;
+    return terminals.start(id, rest);
+  });
+  ipcMain.handle(IpcChannels.terminalStop, async (_event, payload: unknown) => {
+    const parsed = terminalIdPayloadSchema.safeParse(payload);
+    if (parsed.success) await terminals.stop(parsed.data.id);
+  });
+  ipcMain.handle(IpcChannels.terminalSnapshot, (_event, payload: unknown) => {
+    const parsed = terminalIdPayloadSchema.safeParse(payload);
+    return parsed.success ? pty.snapshot(parsed.data.id) : null;
+  });
+  ipcMain.on(IpcChannels.terminalWrite, (_event, payload: unknown) => {
+    const parsed = terminalWriteSchema.safeParse(payload);
+    if (parsed.success) pty.write(parsed.data.id, parsed.data.data);
+  });
+  ipcMain.on(IpcChannels.terminalResize, (_event, payload: unknown) => {
+    const parsed = terminalResizeSchema.safeParse(payload);
+    if (parsed.success) pty.resize(parsed.data.id, parsed.data.cols, parsed.data.rows);
+  });
 }
 
 app.whenReady().then(async () => {
@@ -124,13 +205,16 @@ app.on('web-contents-created', (_event, contents) => {
   contents.on('will-attach-webview', (event) => event.preventDefault());
 });
 
-// Write any pending board change before quitting.
+// Close every terminal process and write any pending board change before quitting.
 let quitting = false;
 app.on('before-quit', (event) => {
   if (quitting) return;
   event.preventDefault();
   quitting = true;
-  void workspace.close({ notify: false }).finally(() => app.quit());
+  void terminals
+    .shutdown()
+    .catch((err: unknown) => console.error('[pty] chiusura dei terminali fallita', err))
+    .finally(() => void workspace.close({ notify: false }).finally(() => app.quit()));
 });
 
 app.on('window-all-closed', () => {

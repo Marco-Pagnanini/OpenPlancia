@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { BOARD_SCHEMA_VERSION } from '@shared/schemas';
 import { DEFAULT_PANEL_SIZES, MIN_PANEL_SIZE, defaultPanelTitle } from '@shared/panels';
 import type {
+  AgentStatus,
   Board,
   BoardIntent,
   Panel,
@@ -11,6 +12,7 @@ import type {
   Position,
   Size,
   TerminalMode,
+  TerminalPanel,
 } from '@shared/types';
 
 export class BoardError extends Error {}
@@ -21,7 +23,15 @@ export interface BoardStoreOptions {
   randomHex?: () => string;
 }
 
-export type BoardListener = (board: Board, intent: BoardIntent) => void;
+/** Changes made by the main process itself, not requested by the renderer. */
+export type InternalChange =
+  /** Runtime-only terminal state: broadcast but never persisted. */
+  | { type: 'terminalStatus'; id: string; status: AgentStatus }
+  | { type: 'claudeSession'; id: string };
+
+export type BoardChange = BoardIntent | InternalChange;
+
+export type BoardListener = (board: Board, change: BoardChange) => void;
 
 const ID_PREFIX: Record<PanelType, string> = {
   terminal: 'term',
@@ -90,8 +100,40 @@ export class BoardStore {
   }
 
   apply(intent: BoardIntent): void {
-    this.board = this.reduce(this.board, intent);
-    for (const listener of this.listeners) listener(this.board, intent);
+    this.commit(this.reduce(this.board, intent), intent);
+  }
+
+  setTerminalStatus(id: string, status: AgentStatus): void {
+    const panel = this.requireTerminal(this.board, id);
+    if (panel.status === status) return;
+    this.commit(this.replacePanel(this.board, { ...panel, status }), {
+      type: 'terminalStatus',
+      id,
+      status,
+    });
+  }
+
+  setClaudeSessionId(id: string, sessionId: string): void {
+    const panel = this.requireTerminal(this.board, id);
+    this.commit(this.replacePanel(this.board, { ...panel, claudeSessionId: sessionId }), {
+      type: 'claudeSession',
+      id,
+    });
+  }
+
+  private commit(board: Board, change: BoardChange): void {
+    this.board = board;
+    for (const listener of this.listeners) listener(this.board, change);
+  }
+
+  private requireTerminal(board: Board, id: string): TerminalPanel {
+    const panel = this.requirePanel(board, id);
+    if (panel.type !== 'terminal') throw new BoardError(`Il panel ${id} non è un terminale`);
+    return panel;
+  }
+
+  private replacePanel(board: Board, panel: Panel): Board {
+    return { ...board, panels: board.panels.map((p) => (p.id === panel.id ? panel : p)) };
   }
 
   private reduce(board: Board, intent: BoardIntent): Board {
@@ -134,6 +176,14 @@ export class BoardStore {
       }
       case 'setViewport':
         return { ...board, viewport: intent.viewport };
+      case 'setTerminalMode': {
+        const terminal = this.requireTerminal(board, intent.id);
+        if (terminal.mode === intent.mode) return board;
+        // A different program starts from scratch: no session to resume.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { claudeSessionId, ...rest } = terminal;
+        return this.replacePanel(board, { ...rest, mode: intent.mode, status: 'not-started' });
+      }
     }
   }
 

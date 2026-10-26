@@ -20,6 +20,8 @@ export function useShortcuts() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTyping(e.target)) return;
+      // Focus mode handles its own keys.
+      if (useUiStore.getState().focusId) return;
       if (e.key === 'Escape') return setTool('select');
       if (e.key === '0') return void fitView({ duration: 200, maxZoom: 1 });
       const item = TOOL_ITEMS.find((t) => t.kind !== 'separator' && t.key === e.key.toUpperCase());
