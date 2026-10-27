@@ -228,15 +228,15 @@ Il risparmio più grande però non dipende dal formato, ma da **quando** e **cos
 
 Gli installer sono nella pagina **[Releases](https://github.com/Marco-Pagnanini/OpenPlancia/releases)**. Serve comunque [Claude Code](https://code.claude.com) installato e con login fatto: OpenPlancia avvia la tua CLI, non ne contiene una.
 
-| Sistema                  | File                                                        | Primo avvio                                                             |
-| ------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 🍎 macOS (Apple Silicon) | `OpenPlancia-…-mac-arm64.dmg`                               | trascina l'app in Applicazioni, poi clic destro → **Apri**              |
-| 🍎 macOS (Intel)         | `OpenPlancia-…-mac-x64.dmg`                                 | come sopra                                                              |
-| 🪟 Windows               | `OpenPlancia-…-win-x64.exe`                                 | SmartScreen: **Ulteriori informazioni → Esegui comunque**               |
-| 🐧 Linux                 | `OpenPlancia-…-linux-x86_64.AppImage` · `…-linux-amd64.deb` | `chmod +x` sull'AppImage, oppure `sudo apt install ./OpenPlancia-….deb` |
+| Sistema                  | File                                                        | Primo avvio                                                                                                    |
+| ------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 🍎 macOS (Apple Silicon) | `OpenPlancia-…-mac-arm64.dmg`                               | trascina l'app in Applicazioni e aprila; poi **Impostazioni di Sistema → Privacy e sicurezza → Apri comunque** |
+| 🍎 macOS (Intel)         | `OpenPlancia-…-mac-x64.dmg`                                 | come sopra                                                                                                     |
+| 🪟 Windows               | `OpenPlancia-…-win-x64.exe`                                 | SmartScreen: **Ulteriori informazioni → Esegui comunque**                                                      |
+| 🐧 Linux                 | `OpenPlancia-…-linux-x86_64.AppImage` · `…-linux-amd64.deb` | `chmod +x` sull'AppImage, oppure `sudo apt install ./OpenPlancia-….deb`                                        |
 
 > [!NOTE]
-> I pacchetti **non sono firmati**: per questo macOS e Windows chiedono conferma la prima volta. Se macOS dice che l'app "è danneggiata", è la quarantena del download: `xattr -dr com.apple.quarantine /Applications/OpenPlancia.app`. I pacchetti Windows e Linux sono costruiti dalla CI ma finora l'app è stata provata a mano solo su macOS.
+> I pacchetti **non hanno un certificato** (niente Apple Developer ID né firma Windows): per questo macOS e Windows chiedono conferma la prima volta. Su macOS l'app ha solo una firma ad-hoc, quindi Apple non può verificare lo sviluppatore: si conferma una volta da **Privacy e sicurezza**. In alternativa, da Terminale: `xattr -dr com.apple.quarantine /Applications/OpenPlancia.app`. I pacchetti Windows e Linux sono costruiti dalla CI ma finora l'app è stata provata a mano solo su macOS.
 
 <details>
 <summary><b>Creare i pacchetti</b></summary>
@@ -369,7 +369,7 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 
 - Le modifiche ai file fatte da Claude con `Bash` non si possono intercettare in modo affidabile: il blocco e il panel Codice valgono per `Write`, `Edit`, `MultiEdit` e `NotebookEdit`.
 - Con lo zoom della lavagna diverso dal 100% la selezione col mouse nei terminali può non coincidere col testo: usa la modalità focus.
-- Provato a mano solo su macOS; i pacchetti Windows e Linux escono dalla CI senza prove manuali. I pacchetti non sono firmati.
+- Provato a mano solo su macOS; i pacchetti Windows e Linux escono dalla CI senza prove manuali. I pacchetti non hanno un certificato (su macOS solo firma ad-hoc).
 - Se `npm run dev` fallisce con `Error: Electron uninstall`, esegui `node node_modules/electron/install.js`.
 
 ---
