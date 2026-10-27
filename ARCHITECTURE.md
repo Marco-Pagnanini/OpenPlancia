@@ -827,7 +827,7 @@ flowchart LR
 | Ponte degli hook | `plancia-hook.cjs` va in `Resources/resources/` come file vero: Claude Code lo esegue con il binario di OpenPlancia e `ELECTRON_RUN_AS_NODE=1` (per questo il fuse `RunAsNode` deve restare acceso). |
 | PATH | Un'app aperta dal Finder non eredita il PATH del terminale: `claude` si trova leggendo l'ambiente della shell di login ([shellEnv.ts](src/main/env/shellEnv.ts)). Verificato lanciando il pacchetto con un PATH minimo. |
 | Build sul Mac | Il .dmg x64 ricompila `node-pty` per Intel dentro `node_modules`: `npm run dist:mac` lo ricompila per la macchina alla fine, altrimenti `npm run dev` caricherebbe il binario sbagliato. |
-| Firma | Nessuna: macOS (Gatekeeper) e Windows (SmartScreen) chiedono conferma al primo avvio. Firma e notarizzazione richiedono un Apple Developer ID e un certificato Windows. |
+| Firma | Su macOS **firma ad-hoc** (`identity: '-'`, `hardenedRuntime: false`): senza nessuna firma valida (le risorse aggiunte invalidavano quella di Electron) un'app scaricata su Apple Silicon risulta "danneggiata" e non si apre. Con la firma ad-hoc Gatekeeper la rifiuta solo perché non notarizzata, e l'utente la apre da Privacy e sicurezza. Il runtime "hardened" con firma ad-hoc rifiuterebbe i framework di Electron (validazione delle librerie). Windows (SmartScreen) chiede conferma al primo avvio. Firma vera e notarizzazione richiedono un Apple Developer ID e un certificato Windows. |
 | Dati | L'app installata usa la sua cartella dati (`~/Library/Application Support/OpenPlancia` su macOS) e ignora `PLANCIA_USER_DATA`. |
 
 Verifica fatta sul pacchetto arm64 (copia con un nome diverso, quindi un profilo dati separato): apertura della cartella, terminale shell, sessione Claude Code con `SessionStart` arrivato dal ponte, `list_panels` chiamato via MCP, hook `PreToolUse` / `PostToolUse` / `Stop` registrati in Attività. I pacchetti Windows e Linux sono costruiti dalla CI ma non ancora provati a mano.
@@ -850,6 +850,7 @@ L'MVP della spec è completo e M8 aggiunge gli agenti che si scrivono. Idee aper
 
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
+| — | macOS: firma ad-hoc al posto di nessuna firma (il .dmg scaricato risultava "danneggiato"), riga "Firma" della sezione 14 |
 | — | Pacchetti: nuova sezione 14 (electron-builder, node-pty fuori dall'asar, `afterPack`, CI per Windows e Linux), file nuovi in mappa; sezioni successive rinumerate |
 | — | "Riprendi tutti gli agenti" nella barra in alto; ripresa di una sessione senza conversazione salvata = sessione nuova con lo stesso id |
 | — | Contesto aggiornato anche dopo ogni tool (`PostToolUse`); pulsante **Sync** per risincronizzare lavagna e agenti |

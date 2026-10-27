@@ -28,8 +28,11 @@ mac:
     - target: dmg
       arch: [arm64, x64]
   category: public.app-category.developer-tools
-  # Not signed nor notarized: macOS asks to confirm the first launch (see README).
-  identity: null
+  # Ad-hoc signature, no Apple Developer ID nor notarization: macOS asks to confirm the first
+  # launch (see README). Without any signature, an app downloaded on Apple Silicon is reported
+  # as "damaged". Hardened runtime would reject Electron's frameworks under an ad-hoc signature.
+  identity: '-'
+  hardenedRuntime: false
 dmg:
   title: ${productName} ${version}
 win:
