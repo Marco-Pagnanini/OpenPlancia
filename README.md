@@ -15,7 +15,7 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 [![Tests](https://img.shields.io/badge/test-230%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
 [![Stato](https://img.shields.io/badge/stato-MVP%20completo-2EA44F?style=flat-square)](#%EF%B8%8F-roadmap)
 
-[Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
+[Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Scarica](#-scarica) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
 
 </div>
 
@@ -23,11 +23,21 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 
 <!--
   🎬 VIDEO DEMO
-  Per mostrare il video su GitHub: apri questo README in modifica sul sito,
-  trascina il file .mp4 qui sotto (al posto di questo commento) e salva.
-  GitHub genera un link "https://github.com/user-attachments/assets/..." che si
-  riproduce direttamente nella pagina.
+  Il video compresso è in docs/assets/openplancia-demo.mp4 (7 MB, sotto il limite di 10 MB).
+  Per il player dentro la pagina: apri questo README in modifica su github.com, trascina
+  quel file qui sotto e sostituisci il blocco <a><img></a> con il link
+  "https://github.com/user-attachments/assets/..." che GitHub genera.
 -->
+
+<div align="center">
+
+<a href="docs/assets/openplancia-demo.mp4"><img src="docs/assets/openplancia-demo-poster.jpg" alt="Demo di OpenPlancia: due sessioni Claude collegate da una freccia si scambiano messaggi" width="100%" /></a>
+
+<sub>▶️ <b><a href="docs/assets/openplancia-demo.mp4">Guarda la demo (3 min)</a></b>: due agenti Claude collegati da una freccia si scrivono, un file Markdown e uno schema di architettura come contesto.</sub>
+
+</div>
+
+<br />
 
 <div align="center">
 
@@ -214,7 +224,44 @@ Il risparmio più grande però non dipende dal formato, ma da **quando** e **cos
 - Il contenuto viene mandato **all'avvio della sessione e poi solo se cambia** (la versione del panel è aumentata o le frecce sono cambiate), al messaggio successivo o già dopo il prossimo tool. Se scrivi dieci messaggi senza toccare il diagramma, Claude lo riceve una volta sola. Il pulsante **Sync** in alto lo fa rimandare intero a tutti gli agenti.
 - Oltre i 9.000 caratteri di contesto, i panel più grandi restano fuori e Claude li legge con `read_panel` solo se gli servono.
 
+## 📦 Scarica
+
+Gli installer sono nella pagina **[Releases](https://github.com/Marco-Pagnanini/OpenPlancia/releases)**. Serve comunque [Claude Code](https://code.claude.com) installato e con login fatto: OpenPlancia avvia la tua CLI, non ne contiene una.
+
+| Sistema                  | File                                                        | Primo avvio                                                             |
+| ------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 🍎 macOS (Apple Silicon) | `OpenPlancia-…-mac-arm64.dmg`                               | trascina l'app in Applicazioni, poi clic destro → **Apri**              |
+| 🍎 macOS (Intel)         | `OpenPlancia-…-mac-x64.dmg`                                 | come sopra                                                              |
+| 🪟 Windows               | `OpenPlancia-…-win-x64.exe`                                 | SmartScreen: **Ulteriori informazioni → Esegui comunque**               |
+| 🐧 Linux                 | `OpenPlancia-…-linux-x86_64.AppImage` · `…-linux-amd64.deb` | `chmod +x` sull'AppImage, oppure `sudo apt install ./OpenPlancia-….deb` |
+
+> [!NOTE]
+> I pacchetti **non sono firmati**: per questo macOS e Windows chiedono conferma la prima volta. Se macOS dice che l'app "è danneggiata", è la quarantena del download: `xattr -dr com.apple.quarantine /Applications/OpenPlancia.app`. I pacchetti Windows e Linux sono costruiti dalla CI ma finora l'app è stata provata a mano solo su macOS.
+
+<details>
+<summary><b>Creare i pacchetti</b></summary>
+
+<br />
+
+Ogni sistema si costruisce sul proprio, perché `node-pty` è un modulo nativo. Sul Mac:
+
+```bash
+npm run dist:mac
+```
+
+Escono in `release/` i due `.dmg` (arm64 e x64). Windows e Linux li costruisce GitHub Actions ([release.yml](.github/workflows/release.yml)): si avvia a mano da **Actions → Pacchetti**, oppure con un tag, che allega i file a una release in bozza:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+I dettagli (cosa entra nel pacchetto, node-pty fuori dall'asar, il ponte degli hook) sono in [ARCHITECTURE.md](ARCHITECTURE.md#14-pacchetti-dmg-exe-linux).
+
+</details>
+
 ## 🚀 Avvio rapido
+
+Per lavorare sul codice (per usarla basta [scaricarla](#-scarica)).
 
 **Requisiti**
 
@@ -263,14 +310,17 @@ Poi **Apri cartella progetto**, premi <kbd>L</kbd> per una sessione Claude, <kbd
 
 <br />
 
-| Comando             | Cosa fa                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| `npm run dev`       | avvia l'app in sviluppo (HMR sul renderer)                 |
-| `npm run build`     | typecheck e build in `out/`                                |
-| `npm run typecheck` | `tsc` su main, preload, shared e renderer                  |
-| `npm run lint`      | ESLint                                                     |
-| `npm test`          | vitest                                                     |
-| `npm run dist`      | pacchetto con electron-builder in `release/` (non firmato) |
+| Comando              | Cosa fa                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| `npm run dev`        | avvia l'app in sviluppo (HMR sul renderer)                  |
+| `npm run build`      | typecheck e build in `out/`                                 |
+| `npm run typecheck`  | `tsc` su main, preload, shared e renderer                   |
+| `npm run lint`       | ESLint                                                      |
+| `npm test`           | vitest                                                      |
+| `npm run dist`       | pacchetto per il sistema in uso in `release/` (non firmato) |
+| `npm run dist:mac`   | `.dmg` per Apple Silicon e Intel                            |
+| `npm run dist:win`   | installer `.exe` (NSIS), da Windows                         |
+| `npm run dist:linux` | AppImage e `.deb`, da Linux                                 |
 
 Per provare senza toccare le proprie impostazioni: `PLANCIA_USER_DATA=/percorso npm run dev` usa una cartella dati separata (ignorata nell'app pacchettizzata).
 
@@ -319,7 +369,7 @@ Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella 
 
 - Le modifiche ai file fatte da Claude con `Bash` non si possono intercettare in modo affidabile: il blocco e il panel Codice valgono per `Write`, `Edit`, `MultiEdit` e `NotebookEdit`.
 - Con lo zoom della lavagna diverso dal 100% la selezione col mouse nei terminali può non coincidere col testo: usa la modalità focus.
-- Provato solo su macOS. Il pacchetto non è firmato.
+- Provato a mano solo su macOS; i pacchetti Windows e Linux escono dalla CI senza prove manuali. I pacchetti non sono firmati.
 - Se `npm run dev` fallisce con `Error: Electron uninstall`, esegui `node node_modules/electron/install.js`.
 
 ---

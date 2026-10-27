@@ -1,6 +1,6 @@
 # Architettura di OpenPlancia
 
-> **Aggiornato a: M8** (multi-agente) · MVP completo più agenti che si scrivono
+> **Aggiornato a: M8 + pacchetti** (multi-agente, installer per macOS, Windows e Linux) · MVP completo più agenti che si scrivono
 > Questo documento viene aggiornato alla fine di ogni milestone. Specifica di prodotto: [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
 
 OpenPlancia è un'app desktop **Electron**. Non c'è un backend remoto: il "backend" è il **processo main** (Node.js sul computer dell'utente), il "frontend" è il **renderer** (React in una finestra Chromium isolata). I due parlano solo attraverso un'API tipizzata e stretta esposta dal **preload**.
@@ -115,6 +115,7 @@ flowchart TB
   root --> res["resources/<br/>icona · plancia-hook.cjs"]
   root --> tests["tests/<br/>vitest"]
   root --> docs["docs/MVP_SPEC.md"]
+  root --> pack["electron-builder.yml · scripts/ · .github/workflows/<br/>pacchetti .dmg · .exe · AppImage · .deb"]
 
   src --> shared["shared/<br/>tipi · schemi zod · contratto IPC"]
   src --> main["main/<br/>processo Node"]
@@ -795,9 +796,45 @@ flowchart TB
 | Claude / server | `hooks`, `LocalServer` (anche MCP reale via SDK e ponte `.cjs`), `ClaudeLauncher`, `ActivityLog` |
 | Contratto | `ipc`, `ping` |
 
+### 13.14 Pacchetti
+
+| File | Contesto |
+|---|---|
+| [electron-builder.yml](electron-builder.yml) | Target (`dmg` arm64 e x64, `nsis` x64, `AppImage` e `deb` x64), risorse extra, `asarUnpack` di node-pty, nome dei file, nessuna firma. |
+| [scripts/after-pack.cjs](scripts/after-pack.cjs) | Hook `afterPack`: rende eseguibile `spawn-helper` di node-pty nel pacchetto. |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | Matrice macOS / Windows / Linux: `npm ci` e `npm run dist:*` su ogni sistema; con un tag `v*` allega i pacchetti a una release in bozza. |
+
 ---
 
-## 14. Roadmap e dopo l'MVP
+## 14. Pacchetti (.dmg, .exe, Linux)
+
+Gli installer li fa **electron-builder** a partire dalla build di electron-vite (`out/`). Ogni sistema operativo si costruisce sul proprio: `node-pty` è un modulo nativo e va compilato per la piattaforma e l'architettura di arrivo, quindi Windows e Linux li costruisce GitHub Actions.
+
+```mermaid
+flowchart LR
+  SRC["src/"] -->|"electron-vite build"| OUT["out/<br/>main · preload · renderer"]
+  OUT --> EB["electron-builder"]
+  DEPS["dependencies del main<br/>node-pty · chokidar · MCP SDK · zod · dagre"] --> EB
+  RES["resources/<br/>icona · plancia-hook.cjs"] -->|"extraResources"| EB
+  EB -->|"rebuild di node-pty per OS e arch"| APP["app.asar + app.asar.unpacked<br/>(node-pty fuori dall'asar)"]
+  APP -->|"afterPack: chmod spawn-helper"| PKG["macOS: .dmg arm64 · x64<br/>Windows: .exe (NSIS)<br/>Linux: AppImage · .deb"]
+```
+
+| Punto | Come è risolto |
+|---|---|
+| Dimensione | Solo le dipendenze usate dal main stanno in `dependencies`; React, Monaco, xterm e il resto del renderer sono `devDependencies`, già inclusi nel bundle di Vite. Il pacchetto macOS pesa ~300 MB installato, ~125 MB il .dmg. |
+| `node-pty` | `asarUnpack` lo lascia su disco (il modulo `.node` e `spawn-helper` non si caricano da un asar). npm non conserva sempre il bit di esecuzione di `spawn-helper` (le copie in `prebuilds/` non lo hanno): senza, ogni terminale fallisce con `posix_spawnp failed`. Lo rimette [scripts/after-pack.cjs](scripts/after-pack.cjs). |
+| Ponte degli hook | `plancia-hook.cjs` va in `Resources/resources/` come file vero: Claude Code lo esegue con il binario di OpenPlancia e `ELECTRON_RUN_AS_NODE=1` (per questo il fuse `RunAsNode` deve restare acceso). |
+| PATH | Un'app aperta dal Finder non eredita il PATH del terminale: `claude` si trova leggendo l'ambiente della shell di login ([shellEnv.ts](src/main/env/shellEnv.ts)). Verificato lanciando il pacchetto con un PATH minimo. |
+| Build sul Mac | Il .dmg x64 ricompila `node-pty` per Intel dentro `node_modules`: `npm run dist:mac` lo ricompila per la macchina alla fine, altrimenti `npm run dev` caricherebbe il binario sbagliato. |
+| Firma | Nessuna: macOS (Gatekeeper) e Windows (SmartScreen) chiedono conferma al primo avvio. Firma e notarizzazione richiedono un Apple Developer ID e un certificato Windows. |
+| Dati | L'app installata usa la sua cartella dati (`~/Library/Application Support/OpenPlancia` su macOS) e ignora `PLANCIA_USER_DATA`. |
+
+Verifica fatta sul pacchetto arm64 (copia con un nome diverso, quindi un profilo dati separato): apertura della cartella, terminale shell, sessione Claude Code con `SessionStart` arrivato dal ponte, `list_panels` chiamato via MCP, hook `PreToolUse` / `PostToolUse` / `Stop` registrati in Attività. I pacchetti Windows e Linux sono costruiti dalla CI ma non ancora provati a mano.
+
+---
+
+## 15. Roadmap e dopo l'MVP
 
 ```mermaid
 flowchart LR
@@ -809,10 +846,11 @@ L'MVP della spec è completo e M8 aggiunge gli agenti che si scrivono. Idee aper
 
 ---
 
-## 15. Registro degli aggiornamenti
+## 16. Registro degli aggiornamenti
 
 | Milestone | Cosa è cambiato in questo documento |
 |---|---|
+| — | Pacchetti: nuova sezione 14 (electron-builder, node-pty fuori dall'asar, `afterPack`, CI per Windows e Linux), file nuovi in mappa; sezioni successive rinumerate |
 | — | "Riprendi tutti gli agenti" nella barra in alto; ripresa di una sessione senza conversazione salvata = sessione nuova con lo stesso id |
 | — | Contesto aggiornato anche dopo ogni tool (`PostToolUse`); pulsante **Sync** per risincronizzare lavagna e agenti |
 | M8 | Agenti che si scrivono: nuova sezione 11 (messaggi nativi governati dalle frecce, subagent, risposte al socket), AgentService nella visione d'insieme, tabella delle connessioni aggiornata, file nuovi in mappa |
