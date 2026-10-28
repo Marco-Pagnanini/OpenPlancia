@@ -1,39 +1,19 @@
 <div align="center">
 
-<img src="docs/assets/logo.png" alt="Logo di OpenPlancia" width="128" />
+**English** · [Italiano](docs/readme/README_it.md)
+
+<img src="docs/assets/logo.png" alt="OpenPlancia logo" width="112" />
 
 # OpenPlancia
 
-**La lavagna infinita per lavorare con Claude Code.**<br />
-Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge e cosa può scrivere.
+An infinite whiteboard for working with Claude Code.<br />
+Terminals, files and diagrams share one canvas, and the arrows between them decide what Claude can read and write.
 
-[![Electron](https://img.shields.io/badge/Electron-45-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node](https://img.shields.io/badge/Node-22.12%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Claude Code](https://img.shields.io/badge/funziona%20con-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
-[![Tests](https://img.shields.io/badge/test-230%20passati-2EA44F?style=flat-square&logo=vitest&logoColor=white)](tests/)
-[![Stato](https://img.shields.io/badge/stato-MVP%20completo-2EA44F?style=flat-square)](#%EF%B8%8F-roadmap)
+[![Release](https://img.shields.io/github/v/release/Marco-Pagnanini/OpenPlancia?include_prereleases&style=flat-square&label=release)](https://github.com/Marco-Pagnanini/OpenPlancia/releases)
+[![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555?style=flat-square)](#download)
+[![Works with Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-D97757?style=flat-square)](https://code.claude.com)
 
-[Perché](#-perché) · [Funzioni](#-cosa-fa) · [Le frecce](#-le-frecce-sono-il-contesto) · [Scarica](#-scarica) · [Avvio rapido](#-avvio-rapido) · [Architettura](#-architettura) · [Roadmap](#%EF%B8%8F-roadmap)
-
-</div>
-
-<br />
-
-<!--
-  🎬 VIDEO DEMO
-  Il video compresso è in docs/assets/openplancia-demo.mp4 (7 MB, sotto il limite di 10 MB).
-  Per il player dentro la pagina: apri questo README in modifica su github.com, trascina
-  quel file qui sotto e sostituisci il blocco <a><img></a> con il link
-  "https://github.com/user-attachments/assets/..." che GitHub genera.
--->
-
-<div align="center">
-
-<a href="docs/assets/openplancia-demo.mp4"><img src="docs/assets/openplancia-demo-poster.jpg" alt="Demo di OpenPlancia: due sessioni Claude collegate da una freccia si scambiano messaggi" width="100%" /></a>
-
-<sub>▶️ <b><a href="docs/assets/openplancia-demo.mp4">Guarda la demo (3 min)</a></b>: due agenti Claude collegati da una freccia si scrivono, un file Markdown e uno schema di architettura come contesto.</sub>
+[Download](#download) · [Features](#features) · [Technical details](#technical-details) · [What's next](#whats-next) · [Build from source](#build-from-source)
 
 </div>
 
@@ -41,233 +21,90 @@ Terminali, file e schemi sulla stessa tela. Le frecce decidono cosa Claude legge
 
 <div align="center">
 
-<img src="docs/assets/board.png" alt="Una lavagna di OpenPlancia: un diagramma di architettura collegato a una sessione Claude Code con una freccia viola" width="100%" />
+<a href="docs/assets/openplancia-demo.mp4"><img src="docs/assets/openplancia-demo.gif" alt="OpenPlancia demo: two Claude sessions connected by an arrow exchange messages, then Claude edits an architecture diagram" width="100%" /></a>
 
-<sub>Un diagramma di architettura collegato a Claude con una freccia viola (lettura e scrittura). Claude ha provato a scrivere una relazione verso un nodo inesistente: OpenPlancia l'ha rifiutata con un errore leggibile.</sub>
+<sub>The demo at 8x speed. <a href="docs/assets/openplancia-demo.mp4">Watch the full 3-minute video</a>.</sub>
 
 </div>
 
----
+## Download
 
-## 💡 Perché
+| System                | File                                                                                                                                                                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS (Apple Silicon) | [OpenPlancia-0.1.1-mac-arm64.dmg](https://github.com/Marco-Pagnanini/OpenPlancia/releases/download/v0.1.1/OpenPlancia-0.1.1-mac-arm64.dmg)                                                                                                      |
+| macOS (Intel)         | [OpenPlancia-0.1.1-mac-x64.dmg](https://github.com/Marco-Pagnanini/OpenPlancia/releases/download/v0.1.1/OpenPlancia-0.1.1-mac-x64.dmg)                                                                                                          |
+| Windows               | [OpenPlancia-0.1.1-win-x64.exe](https://github.com/Marco-Pagnanini/OpenPlancia/releases/download/v0.1.1/OpenPlancia-0.1.1-win-x64.exe)                                                                                                          |
+| Linux                 | [AppImage](https://github.com/Marco-Pagnanini/OpenPlancia/releases/download/v0.1.1/OpenPlancia-0.1.1-linux-x86_64.AppImage) · [.deb](https://github.com/Marco-Pagnanini/OpenPlancia/releases/download/v0.1.1/OpenPlancia-0.1.1-linux-amd64.deb) |
 
-Con più sessioni di Claude Code aperte, il contesto finisce sparso tra tab del terminale, file aperti nell'editor e istruzioni ripetute a mano. Non si vede **cosa sa** ogni agente né **cosa può toccare**.
+All versions are on the [Releases page](https://github.com/Marco-Pagnanini/OpenPlancia/releases). OpenPlancia runs your own Claude Code CLI, so [Claude Code](https://code.claude.com) must be installed and logged in.
 
-OpenPlancia mette tutto su una lavagna infinita: ogni terminale, ogni file e ogni schema è un panel. Per dare un file a Claude **tracci una freccia**. Per toglierlo **cancelli la freccia**. La lavagna è il contesto.
+The builds are not signed with a paid certificate, so the first launch needs one extra confirmation:
 
-## ✨ Cosa fa
+- **macOS:** open the app, close the warning, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+- **Windows:** in the SmartScreen dialog, click **More info → Run anyway**.
+- **Linux:** `chmod +x` the AppImage, or install the package with `sudo apt install ./OpenPlancia-*.deb`.
 
-<table>
-<tr>
-<td width="50%" valign="top">
+## Features
 
-### 🖥️ Terminali veri sulla tela
+<img src="docs/assets/board.png" alt="An OpenPlancia board: an architecture diagram connected to a Claude Code session with a two-way arrow" width="100%" />
 
-Shell e sessioni **Claude Code** in panel spostabili e ridimensionabili (node-pty + xterm). Le sessioni Claude riprendono da dove erano dopo un riavvio (`--resume`), anche tutte insieme con **Riprendi tutti gli agenti**, e una shell si converte in Claude con un clic.
+Every terminal, Markdown file and diagram is a panel on the board. To give Claude a file you draw an arrow; to take it away you delete the arrow.
 
-</td>
-<td width="50%" valign="top">
+| Arrow                   | What Claude can do                                                  |
+| ----------------------- | ------------------------------------------------------------------- |
+| panel → Claude          | read the panel, which is added to its context                       |
+| Claude → panel          | write the file, with `Write`/`Edit` or the `write_panel` tool       |
+| both directions         | read and write                                                      |
+| no arrow                | nothing: writes to the panel's file are blocked before they run     |
+| Claude → another Claude | send it messages with `SendMessage`; arrows both ways let them talk |
 
-### 🧠 Stato di ogni agente a colpo d'occhio
+Panels:
 
-Badge **in lavoro / attende input / fermo**, strumento in uso nell'header, contatore degli agenti attivi e un pannello **Attività** con la cronologia di ogni sessione, alimentato dagli hook di Claude Code.
+- **Terminal and Claude Code sessions.** Real shells (node-pty and xterm.js). Claude sessions resume after a restart with `--resume`, one at a time or all together.
+- **Markdown.** Preview and edit with Monaco. External changes are picked up, and if the file changes while you type you choose which version to keep.
+- **Folder.** One panel for a whole folder of `.md` files. A single arrow gives Claude the folder, and a write arrow lets it create new files there.
+- **Architecture.** A node editor for services, APIs, databases and queues. Claude reads it as validated JSON and can edit it; new nodes are laid out next to the ones they connect to, and invalid edits are rejected with the exact error.
+- **Code.** The files the agents are changing, newest first, with a read-only diff against the last commit, updated live.
 
-</td>
-</tr>
-<tr>
-<td valign="top">
+Around the panels:
 
-### 📝 Markdown modificabile
+- Each Claude session shows whether it is working, waiting for input or idle, plus the tool it is using. An activity log keeps the history.
+- An arrow animates when Claude uses it. The inspector lists every read and write, and "What Claude sees" shows the exact text sent to the session.
+- Every write Claude makes to a panel can be undone, up to 20 steps per file.
 
-Anteprima e modifica (Monaco) di file `.md` del progetto, con salvataggio, rilevamento delle modifiche esterne e gestione dei conflitti: se il file cambia mentre lo stai scrivendo, scegli tu quale versione tenere.
+## Technical details
 
-</td>
-<td valign="top">
+| Layer       | Stack                                                        |
+| ----------- | ------------------------------------------------------------ |
+| Desktop app | Electron 45, electron-vite, electron-builder                 |
+| Interface   | React 19, React Flow 12, zustand, Tailwind CSS 4             |
+| Terminals   | node-pty, xterm.js 6 (WebGL on the active panel)             |
+| Editor      | Monaco, loaded on demand                                     |
+| Contracts   | TypeScript strict, zod at every boundary (IPC, files, hooks) |
+| Claude Code | hooks, a local MCP server, `--session-id` / `--resume`       |
 
-### 🔗 Frecce = contesto
+**How Claude gets the context.** OpenPlancia starts each Claude session with its own hooks and a local MCP server called `plancia`. The hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`) talk to a server on `127.0.0.1` with a random port and a 32-byte token. `UserPromptSubmit` sends the list of connected panels, `PreToolUse` blocks writes that have no arrow, and the MCP server exposes `list_panels`, `read_panel`, `write_panel` and `get_panel_schema`.
 
-Una freccia verso Claude gli fa **leggere** il panel; una freccia da Claude gli permette di **scriverci**. Claude riceve l'elenco dei panel collegati e vede i cambiamenti al messaggio successivo.
+**Context stays small.** Only connected panels are sent, and only when they change: at session start, then again when a panel's version or the arrows change. A folder is sent as an index of its files plus the small ones; Claude reads the rest with `read_panel` when it needs them. An architecture diagram is sent as compact JSON without positions, about 220 tokens for 6 nodes and 6 relations, against roughly 1,700 for a screenshot of the same diagram.
 
-</td>
-</tr>
-<tr>
-<td valign="top">
+**Storage.** Each project keeps its board in `.plancia/board.json` inside the project folder, so it can be committed with the code or ignored.
 
-### 🛡️ Permessi che valgono davvero
+**Security.** The renderer runs with `contextIsolation` and `sandbox` and a strict CSP, and the preload exposes only a typed API. Every path is resolved and checked against the project folder before a read or write. Claude never writes inside `.plancia/` directly: diagrams go through `write_panel`, which validates them.
 
-Senza freccia di scrittura, `Write` ed `Edit` sui file dei panel vengono **bloccati** prima di essere eseguiti. Ogni scrittura di Claude si può **annullare** (fino a 20 passi per file).
+The full architecture, with diagrams and a map of every file, is in [ARCHITECTURE.md](ARCHITECTURE.md) (in Italian).
 
-</td>
-<td valign="top">
+## What's next
 
-### 🔍 Tutto trasparente
+**Reusable templates.** Save a board as a template, with its panels, arrows and Claude sessions, and start a new project from it. For example, a planner, an implementer and a reviewer already connected to a shared `PLAN.md`, ready to use in any repository.
 
-La freccia si anima quando Claude la usa. L'inspector mostra letture e scritture con versione e token stimati, e **"Cosa vede Claude"** mostra il testo esatto passato alla sessione.
+Also planned:
 
-</td>
-</tr>
-<tr>
-<td colspan="2" valign="top">
+- Signed and notarized macOS builds, so the first launch needs no extra steps.
+- Manual testing on Windows and Linux. The packages are built by CI, but so far the app has only been tested by hand on macOS.
 
-### 📁 Cartelle intere in un solo panel
+## Build from source
 
-Scegli una cartella (es. `docs/`): il panel mostra l'albero dei suoi file `.md`, con l'anteprima del file selezionato. Una freccia sola dà a Claude il contesto di tutta la cartella, e con la freccia di scrittura può anche **creare** file nuovi (un nuovo ADR, un piano). Nessuna lavagna piena di panel Markdown.
-
-</td>
-</tr>
-<tr>
-<td colspan="2" valign="top">
-
-### 🧾 Il codice che cambia, sotto gli occhi
-
-Il panel **Codice** elenca i file che gli agenti modificano, il più recente in alto, con chi li ha toccati e quando. Selezionandone uno vedi il **diff rispetto all'ultimo commit** (o il file intero), in sola lettura, aggiornato in tempo reale. Puoi seguire tutti gli agenti o uno solo, e aprire a mano qualsiasi file del progetto.
-
-</td>
-</tr>
-<tr>
-<td colspan="2" valign="top">
-
-### 🤝 Agenti che si scrivono
-
-Una freccia tra due terminali Claude dà al primo il permesso di **scrivere al secondo** con i messaggi nativi di Claude Code: "chiedi a Claude 2 di…", e l'altro esegue e risponde. Senza freccia il messaggio è bloccato, così come quelli verso sessioni fuori dalla lavagna. Il filo turchese si anima a ogni messaggio e l'ispettore li conserva.
-
-</td>
-</tr>
-<tr>
-<td colspan="2" valign="top">
-
-### 📐 Schemi di architettura che Claude capisce e modifica
-
-Disegni servizi, API, database e code con un editor a nodi; Claude li riceve come **JSON validato** e li può modificare. Se gli chiedi "aggiungi una coda tra API e worker", il diagramma si aggiorna: i nodi nuovi si posizionano da soli vicino a quelli collegati e quelli esistenti restano dove li hai messi. Un documento non valido viene rifiutato con l'errore esatto (es. `to: il nodo "fantasma" non esiste`), e **"Vedi JSON"** mostra quello che riceve Claude.
-
-</td>
-</tr>
-</table>
-
-<div align="center">
-<img src="docs/assets/home.png" alt="Schermata iniziale di OpenPlancia con il pulsante per aprire una cartella" width="560" />
-<br />
-<sub>La schermata iniziale: apri una cartella di progetto o riprendi una recente. Il clic sul logo riporta sempre qui.</sub>
-</div>
-
-## 🔗 Le frecce sono il contesto
-
-```mermaid
-flowchart LR
-    A["📄 AGENTS.md"] -- "lettura" --> C(["🤖 Claude"])
-    C -- "scrittura" --> P["📝 PLAN.md"]
-    S["📐 Schema"] <-- "lettura e scrittura" --> C
-
-    linkStyle 0 stroke:#8fa9c9,stroke-width:2px
-    linkStyle 1 stroke:#e0b97e,stroke-width:2px
-    linkStyle 2 stroke:#b294d6,stroke-width:2px
-```
-
-| Freccia                  | Colore      | Cosa può fare Claude                                            |
-| ------------------------ | ----------- | --------------------------------------------------------------- |
-| panel → Claude           | 🔵 blu      | legge il contenuto, che gli arriva nel contesto                 |
-| Claude → panel           | 🟠 ambra    | scrive il file (con `Write`/`Edit` o con il tool `write_panel`) |
-| in entrambe le direzioni | 🟣 viola    | legge e scrive                                                  |
-| nessuna freccia          | —           | niente: le scritture sui file dei panel vengono bloccate        |
-| Claude → altro Claude    | 🟢 turchese | gli scrive con `SendMessage` (doppia freccia: si scrivono)      |
-
-<details>
-<summary><b>Come funziona sotto il cofano</b></summary>
-
-<br />
-
-Ogni sessione Claude viene avviata da OpenPlancia con i propri hook e un server MCP locale. Il processo principale di Electron è l'unica fonte di verità.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as Tu
-    participant R as Lavagna (renderer)
-    participant M as OpenPlancia (main)
-    participant C as Claude Code
-
-    U->>R: tracci una freccia AGENTS.md → Claude
-    R->>M: intento "connect"
-    M->>M: salva in .plancia/board.json
-    U->>C: scrivi un messaggio
-    C->>M: hook UserPromptSubmit
-    M-->>C: elenco dei panel collegati (solo se è cambiato)
-    C->>M: Write su un file senza freccia di scrittura
-    M-->>C: hook PreToolUse → bloccato
-    C->>M: mcp__plancia__write_panel su PLAN.md
-    M-->>R: file aggiornato, freccia animata, Annulla disponibile
-```
-
-- **Hook** verso un server locale su `127.0.0.1` (porta casuale, token nel percorso): `SessionStart` tramite un piccolo script ponte, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification` e `Stop` via HTTP.
-- **Server MCP `plancia`** con i tool `list_panels`, `read_panel`, `write_panel` e `get_panel_schema` (JSON Schema degli schemi di architettura).
-- **Niente fuori dalla cartella del progetto**: ogni percorso viene risolto e controllato prima di leggere o scrivere.
-
-</details>
-
-## 🪙 JSON e token: cosa si risparmia davvero
-
-Gli schemi di architettura arrivano a Claude come JSON, non come immagini né come descrizioni a parole. Misurato su un diagramma reale di 6 nodi e 6 relazioni (token stimati come caratteri / 4):
-
-| Come lo si potrebbe passare a Claude                                | Token circa | Note                                                       |
-| ------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- |
-| Screenshot del diagramma (~1400×900)                                | ~1.700      | Claude deve "leggere" l'immagine; non la può modificare    |
-| JSON indentato con le posizioni (com'è salvato su disco)            | ~430        | Metà dei caratteri sono spazi e coordinate                 |
-| **JSON che riceve Claude** (senza posizioni, una riga per elemento) | **~220**    | Validato, id stabili, Claude lo riscrive con `write_panel` |
-| Mermaid                                                             | ~90         | Più corto, ma senza schema né validazione                  |
-
-Quindi sì, rispetto a uno screenshot si risparmia circa **8 volte** e rispetto al JSON "grezzo" circa la metà. Il JSON non è il formato più corto in assoluto: lo usiamo perché è **preciso**. Ogni scrittura di Claude viene controllata (id unici, relazioni verso nodi che esistono) e un errore non rompe mai il diagramma.
-
-Il risparmio più grande però non dipende dal formato, ma da **quando** e **cosa** si manda:
-
-- **Solo i panel collegati** entrano nel contesto, non l'intero progetto.
-- Per una **cartella** entra l'indice dei file (percorso, titolo, versione: ~50 caratteri a file) più i file piccoli; gli altri Claude li legge solo se gli servono. Un file presente in due cartelle collegate entra una volta sola.
-- Il contenuto viene mandato **all'avvio della sessione e poi solo se cambia** (la versione del panel è aumentata o le frecce sono cambiate), al messaggio successivo o già dopo il prossimo tool. Se scrivi dieci messaggi senza toccare il diagramma, Claude lo riceve una volta sola. Il pulsante **Sync** in alto lo fa rimandare intero a tutti gli agenti.
-- Oltre i 9.000 caratteri di contesto, i panel più grandi restano fuori e Claude li legge con `read_panel` solo se gli servono.
-
-## 📦 Scarica
-
-Gli installer sono nella pagina **[Releases](https://github.com/Marco-Pagnanini/OpenPlancia/releases)**. Serve comunque [Claude Code](https://code.claude.com) installato e con login fatto: OpenPlancia avvia la tua CLI, non ne contiene una.
-
-| Sistema                  | File                                                        | Primo avvio                                                                                                    |
-| ------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| 🍎 macOS (Apple Silicon) | `OpenPlancia-…-mac-arm64.dmg`                               | trascina l'app in Applicazioni e aprila; poi **Impostazioni di Sistema → Privacy e sicurezza → Apri comunque** |
-| 🍎 macOS (Intel)         | `OpenPlancia-…-mac-x64.dmg`                                 | come sopra                                                                                                     |
-| 🪟 Windows               | `OpenPlancia-…-win-x64.exe`                                 | SmartScreen: **Ulteriori informazioni → Esegui comunque**                                                      |
-| 🐧 Linux                 | `OpenPlancia-…-linux-x86_64.AppImage` · `…-linux-amd64.deb` | `chmod +x` sull'AppImage, oppure `sudo apt install ./OpenPlancia-….deb`                                        |
-
-> [!NOTE]
-> I pacchetti **non hanno un certificato** (niente Apple Developer ID né firma Windows): per questo macOS e Windows chiedono conferma la prima volta. Su macOS l'app ha solo una firma ad-hoc, quindi Apple non può verificare lo sviluppatore: si conferma una volta da **Privacy e sicurezza**. In alternativa, da Terminale: `xattr -dr com.apple.quarantine /Applications/OpenPlancia.app`. I pacchetti Windows e Linux sono costruiti dalla CI ma finora l'app è stata provata a mano solo su macOS.
-
-<details>
-<summary><b>Creare i pacchetti</b></summary>
-
-<br />
-
-Ogni sistema si costruisce sul proprio, perché `node-pty` è un modulo nativo. Sul Mac:
-
-```bash
-npm run dist:mac
-```
-
-Escono in `release/` i due `.dmg` (arm64 e x64). Windows e Linux li costruisce GitHub Actions ([release.yml](.github/workflows/release.yml)): si avvia a mano da **Actions → Pacchetti**, oppure con un tag, che allega i file a una release in bozza:
-
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-```
-
-I dettagli (cosa entra nel pacchetto, node-pty fuori dall'asar, il ponte degli hook) sono in [ARCHITECTURE.md](ARCHITECTURE.md#14-pacchetti-dmg-exe-linux).
-
-</details>
-
-## 🚀 Avvio rapido
-
-Per lavorare sul codice (per usarla basta [scaricarla](#-scarica)).
-
-**Requisiti**
-
-- macOS (l'unica piattaforma provata finora)
-- [Node.js](https://nodejs.org/) 22.12 o successivo (`nvm use` legge `.nvmrc`)
-- [Claude Code](https://code.claude.com) installato e con login fatto, per i terminali Claude
+You need [Node.js](https://nodejs.org/) 22.12 or later and [Claude Code](https://code.claude.com) installed and logged in.
 
 ```bash
 git clone https://github.com/Marco-Pagnanini/OpenPlancia.git
@@ -281,102 +118,63 @@ cd OpenPlancia && nvm use && npm install
 npm run dev
 ```
 
-Poi **Apri cartella progetto**, premi <kbd>L</kbd> per una sessione Claude, <kbd>M</kbd> per un file Markdown, e trascina una freccia dal pallino di un panel all'altro.
+Open a project folder, press <kbd>L</kbd> for a Claude session and <kbd>M</kbd> for a Markdown file, then drag an arrow from one panel's handle to the other.
 
 <details>
-<summary><b>Scorciatoie da tastiera</b></summary>
+<summary><b>Keyboard shortcuts</b></summary>
 
 <br />
 
-| Tasto                                  | Azione                                  |
-| -------------------------------------- | --------------------------------------- |
-| <kbd>V</kbd>                           | puntatore                               |
-| <kbd>H</kbd>                           | sposta la lavagna                       |
-| <kbd>T</kbd>                           | nuovo terminale                         |
-| <kbd>L</kbd>                           | nuova sessione Claude                   |
-| <kbd>M</kbd>                           | nuovo file Markdown o apri un esistente |
-| <kbd>F</kbd>                           | nuova cartella (albero dei file .md)    |
-| <kbd>A</kbd>                           | nuovo schema di architettura            |
-| <kbd>K</kbd>                           | nuovo panel Codice                      |
-| <kbd>0</kbd>                           | inquadra tutti i panel                  |
-| <kbd>Backspace</kbd> / <kbd>Canc</kbd> | elimina i panel o le frecce selezionati |
-| <kbd>Esc</kbd>                         | torna al puntatore                      |
-| doppio clic sull'header                | modalità focus sul panel                |
+| Key                                   | Action                               |
+| ------------------------------------- | ------------------------------------ |
+| <kbd>V</kbd>                          | pointer                              |
+| <kbd>H</kbd>                          | pan the board                        |
+| <kbd>T</kbd>                          | new terminal                         |
+| <kbd>L</kbd>                          | new Claude session                   |
+| <kbd>M</kbd>                          | new Markdown file, or open one       |
+| <kbd>F</kbd>                          | new folder panel                     |
+| <kbd>A</kbd>                          | new architecture diagram             |
+| <kbd>K</kbd>                          | new Code panel                       |
+| <kbd>0</kbd>                          | fit all panels in view               |
+| <kbd>Backspace</kbd> / <kbd>Del</kbd> | delete the selected panels or arrows |
+| <kbd>Esc</kbd>                        | back to the pointer                  |
+| double-click a panel header           | focus mode                           |
 
 </details>
 
 <details>
-<summary><b>Tutti gli script</b></summary>
+<summary><b>Scripts</b></summary>
 
 <br />
 
-| Comando              | Cosa fa                                                     |
-| -------------------- | ----------------------------------------------------------- |
-| `npm run dev`        | avvia l'app in sviluppo (HMR sul renderer)                  |
-| `npm run build`      | typecheck e build in `out/`                                 |
-| `npm run typecheck`  | `tsc` su main, preload, shared e renderer                   |
-| `npm run lint`       | ESLint                                                      |
-| `npm test`           | vitest                                                      |
-| `npm run dist`       | pacchetto per il sistema in uso in `release/` (non firmato) |
-| `npm run dist:mac`   | `.dmg` per Apple Silicon e Intel                            |
-| `npm run dist:win`   | installer `.exe` (NSIS), da Windows                         |
-| `npm run dist:linux` | AppImage e `.deb`, da Linux                                 |
+| Command              | What it does                                       |
+| -------------------- | -------------------------------------------------- |
+| `npm run dev`        | start the app in development (HMR on the renderer) |
+| `npm run build`      | typecheck and build into `out/`                    |
+| `npm run typecheck`  | `tsc` on main, preload, shared and renderer        |
+| `npm run lint`       | ESLint                                             |
+| `npm test`           | vitest                                             |
+| `npm run dist:mac`   | `.dmg` for Apple Silicon and Intel                 |
+| `npm run dist:win`   | `.exe` installer (NSIS), from Windows              |
+| `npm run dist:linux` | AppImage and `.deb`, from Linux                    |
 
-Per provare senza toccare le proprie impostazioni: `PLANCIA_USER_DATA=/percorso npm run dev` usa una cartella dati separata (ignorata nell'app pacchettizzata).
+Each platform must be built on that platform, because `node-pty` is a native module. Pushing a `v*` tag runs [release.yml](.github/workflows/release.yml), which builds all three and attaches them to a draft release.
+
+To try the app without touching your own settings: `PLANCIA_USER_DATA=/some/path npm run dev`.
 
 </details>
 
-## 🧱 Architettura
+## Known limitations
 
-| Livello             | Tecnologia                                                                   |
-| ------------------- | ---------------------------------------------------------------------------- |
-| App desktop         | Electron 45 · electron-vite · electron-builder                               |
-| Interfaccia         | React 19 · React Flow 12 · zustand · Tailwind CSS 4 · Phosphor Icons · Geist |
-| Terminali           | node-pty · xterm.js 6 (WebGL sul panel attivo)                               |
-| Editor              | Monaco (caricato solo quando serve)                                          |
-| Diagrammi           | React Flow dedicato in modalità focus · anteprima SVG · layout con dagre     |
-| File                | chokidar per le modifiche esterne · scritture atomiche                       |
-| Contratti           | TypeScript strict · zod a ogni confine (IPC, file, hook)                     |
-| Integrazione Claude | hook · server MCP locale · `--session-id` / `--resume`                       |
-| git                 | solo lettura (`git show HEAD:…`) per il diff del panel Codice                |
-
-Ogni progetto salva la sua lavagna in `.plancia/board.json`, dentro la cartella stessa: si può versionare con git o ignorare.
-
-📐 La documentazione completa, con diagrammi e la mappa di ogni file, è in **[ARCHITECTURE.md](ARCHITECTURE.md)**. La specifica del prodotto è in [docs/MVP_SPEC.md](docs/MVP_SPEC.md).
-
-## 🗺️ Roadmap
-
-- [x] **M0** · Scaffold: Electron, React, TypeScript strict, test
-- [x] **M1** · Lavagna infinita, panel, salvataggio in `.plancia/board.json`
-- [x] **M2** · Terminali e sessioni Claude Code, ripresa dopo il riavvio, modalità focus
-- [x] **M3** · Stato degli agenti tramite hook, pannello Attività
-- [x] **M4** · Panel Markdown con modifica, modifiche esterne e conflitti
-- [x] **M5** · Frecce come contesto: lettura, scrittura, blocco, Annulla, inspector
-- [x] Schermata iniziale con cartelle recenti
-- [x] **M6** · Panel Architettura: schemi in JSON validato che Claude legge e modifica, layout automatico, "Vedi JSON"
-- [x] **M6.5** · Panel Cartella: albero dei `.md` di una cartella, una freccia per tutta la cartella, Claude crea e modifica file
-- [x] **M7** · Panel Codice: file modificati dagli agenti, diff con `HEAD` in sola lettura, in tempo reale
-- [x] **M8** · Multi-agente: frecce tra terminali Claude che governano i messaggi nativi di Claude Code
-
-## 🔒 Sicurezza
-
-- Renderer isolato (`contextIsolation`, `sandbox`, niente `nodeIntegration`) con CSP restrittiva; il preload espone solo un'API tipizzata.
-- Il server locale ascolta solo su `127.0.0.1`, con porta casuale e token a 32 byte; i file di avvio delle sessioni stanno nella cartella dati dell'app, mai nel progetto.
-- Lettura e scrittura limitate alla cartella del progetto. Claude non scrive mai direttamente dentro `.plancia/`: gli schemi di architettura passano da `write_panel`, che li valida.
-- Navigazione e nuove finestre bloccate; i link si aprono nel browser di sistema.
-
-## ⚠️ Limiti noti
-
-- Le modifiche ai file fatte da Claude con `Bash` non si possono intercettare in modo affidabile: il blocco e il panel Codice valgono per `Write`, `Edit`, `MultiEdit` e `NotebookEdit`.
-- Con lo zoom della lavagna diverso dal 100% la selezione col mouse nei terminali può non coincidere col testo: usa la modalità focus.
-- Provato a mano solo su macOS; i pacchetti Windows e Linux escono dalla CI senza prove manuali. I pacchetti non hanno un certificato (su macOS solo firma ad-hoc).
-- Se `npm run dev` fallisce con `Error: Electron uninstall`, esegui `node node_modules/electron/install.js`.
+- File changes Claude makes through `Bash` can't be intercepted reliably. Blocking and the Code panel cover `Write`, `Edit`, `MultiEdit` and `NotebookEdit`.
+- When the board zoom isn't 100%, mouse selection in terminals can drift from the text. Use focus mode.
+- If `npm run dev` fails with `Error: Electron uninstall`, run `node node_modules/electron/install.js`.
 
 ---
 
 <div align="center">
 <sub>
-OpenPlancia è un progetto indipendente e non è affiliato ad Anthropic.<br />
-Claude e Claude Code sono marchi di Anthropic.
+OpenPlancia is an independent project and is not affiliated with Anthropic.<br />
+Claude and Claude Code are trademarks of Anthropic.
 </sub>
 </div>
