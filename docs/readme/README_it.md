@@ -95,12 +95,16 @@ L'architettura completa, con diagrammi e la mappa di ogni file, è in [ARCHITECT
 
 ## Sviluppi futuri
 
+**Riquadri e testo stile Excalidraw.** Rettangoli, ellissi, note e testo semplice sulla lavagna, con un colore di riempimento e del testo dentro. Servono per raggruppare i panel, lasciare annotazioni o abbozzare uno schema veloce senza aprire un panel Architettura.
+
 **Template riutilizzabili.** Salvare una lavagna come template, con i suoi panel, le frecce e le sessioni Claude, e partire da lì per un nuovo progetto. Per esempio un planner, un implementatore e un revisore già collegati a un `PLAN.md` condiviso, pronti da usare in qualsiasi repository.
 
 In programma anche:
 
 - Pacchetti macOS firmati e notarizzati, così il primo avvio non chiede passaggi in più.
 - Prove a mano su Windows e Linux. I pacchetti li costruisce la CI, ma finora l'app è stata provata a mano solo su macOS.
+
+L'elenco completo, con le domande ancora aperte, è in [TODO.md](../../TODO.md).
 
 ## Compilare dai sorgenti
 

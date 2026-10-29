@@ -842,7 +842,7 @@ flowchart LR
   M3 --> M4["M4 Markdown ✅"] --> M5["M5 Connessioni ✅"] --> M6["M6 Architettura ✅"] --> M65["M6.5 Cartella ✅"] --> M7["M7 Codice ✅"] --> M8["M8 Multi-agente ✅"]
 ```
 
-L'MVP della spec è completo e M8 aggiunge gli agenti che si scrivono. Idee aperte: panel Design, ripresa automatica degli agenti all'apertura (opzionale), "Riordina" negli schemi.
+L'MVP della spec è completo e M8 aggiunge gli agenti che si scrivono. Le funzioni in programma (riquadri stile Excalidraw, template riutilizzabili) e le idee aperte sono in [TODO.md](TODO.md).
 
 ---
 
