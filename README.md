@@ -95,12 +95,16 @@ The full architecture, with diagrams and a map of every file, is in [ARCHITECTUR
 
 ## What's next
 
+**Shapes and text, Excalidraw style.** Rectangles, ellipses, notes and plain text on the board, with a fill color and text inside. Use them to group panels, leave notes or sketch a quick diagram without opening an Architecture panel.
+
 **Reusable templates.** Save a board as a template, with its panels, arrows and Claude sessions, and start a new project from it. For example, a planner, an implementer and a reviewer already connected to a shared `PLAN.md`, ready to use in any repository.
 
 Also planned:
 
 - Signed and notarized macOS builds, so the first launch needs no extra steps.
 - Manual testing on Windows and Linux. The packages are built by CI, but so far the app has only been tested by hand on macOS.
+
+The full list, with the open questions, is in [TODO.md](TODO.md) (in Italian).
 
 ## Build from source
 
