@@ -30,6 +30,23 @@ Da decidere:
 - Dove salvarli: nella cartella dati dell'app (template personali) o in `.plancia/templates/` del progetto (condivisi con git). Forse entrambi.
 - Se un template può portare con sé un prompt iniziale per ogni sessione Claude.
 
+## 3. Commit, push e merge dalla lavagna
+
+Se la cartella aperta è un repository git, la barra in alto mostra il branch corrente e i pulsanti per le azioni più comuni, come fa Claude Code: **Commit**, **Push** e **Merge** nel branch principale. Così, quando gli agenti hanno finito, il lavoro si chiude senza passare dal terminale.
+
+- Si attiva solo se c'è un repository (`git rev-parse` dalla cartella del progetto, anche se il `.git` sta in una cartella sopra).
+- Accanto al branch: file modificati e commit avanti o indietro rispetto al remoto.
+- **Commit:** elenco dei file modificati (lo stesso del panel Codice) con il diff, e un campo per il messaggio.
+- **Push** e **Merge** chiedono sempre conferma e mostrano cosa stanno per fare (branch, commit, remoto).
+- Usa il `git` del sistema con le sue credenziali: OpenPlancia non salva password né token.
+
+Da decidere:
+
+- Se il messaggio di commit lo può proporre una sessione Claude collegata, partendo dal diff.
+- Cosa fare con i conflitti di merge: fermarsi e mostrarli nel panel Codice, oppure passarli a una sessione Claude.
+- Se aggiungere anche "Apri PR" (con `gh`) per chi lavora su GitHub.
+- Oggi OpenPlancia usa git solo in lettura (il diff del panel Codice). Questa sarebbe la prima scrittura: va tenuta separata e coperta da test con un repository vero.
+
 ## Poi
 
 - Pacchetti macOS firmati e notarizzati, così il primo avvio non chiede passaggi in più.
