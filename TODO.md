@@ -47,6 +47,31 @@ Da decidere:
 - Se aggiungere anche "Apri PR" (con `gh`) per chi lavora su GitHub.
 - Oggi OpenPlancia usa git solo in lettura (il diff del panel Codice). Questa sarebbe la prima scrittura: va tenuta separata e coperta da test con un repository vero.
 
+## 4. Modalità studio: la chat tutor
+
+Una chat laterale, apribile e allargabile sopra la lavagna, collegata a una sessione Claude che fa da tutor. Gli agenti lavorano sulla lavagna (per esempio un orchestratore che scrive il `.md`, uno per la ricerca web, uno per le slide) e nella chat lo studente chiede cosa è successo, come si è arrivati a un risultato, da dove viene un'informazione, o si fa spiegare un concetto passo per passo.
+
+Resta uno strumento per chi sa architettare un flusso di agenti: Claude Code installato e la lavagna da costruire, come per il resto di OpenPlancia. Non è una chat generica per tutti.
+
+- **Vede tutta la lavagna** in lettura, senza bisogno di frecce: panel, file e il lavoro degli agenti.
+- **Spiega solo in base a quello che è stato fatto.** Non modifica i panel degli agenti e non dà loro ordini.
+- **Legge il processo, non solo i risultati:** il registro delle attività, i messaggi tra agenti e le conversazioni delle sessioni (Claude Code le salva su disco e OpenPlancia conosce i `--session-id`). Un nuovo tool MCP, per esempio `read_agent_history`, le legge solo quando servono, partendo dal registro delle attività che è più corto.
+- **Comportamento da tutor:** spiega per gradi, cita quale agente e quale fonte hanno prodotto un'informazione, fa domande di verifica invece di dare subito la risposta.
+- **Chat grafica, come l'app desktop di Claude, non un terminale:** messaggi con il testo che arriva mentre Claude scrive, Markdown, formule e blocchi di codice, i tool usati mostrati compressi ("Ha letto Problem.md"), link cliccabili ai panel della lavagna e il campo per scrivere in basso.
+- **Crea materiali di studio come panel nuovi** sulla lavagna (può creare, ma non toccare quelli degli agenti):
+  - flashcard e quiz come JSON validato, mostrati da un panel nativo (carte da girare, punteggio, progressi), come già fa il panel Architettura;
+  - schemi semplici in Mermaid dentro un file Markdown;
+  - spiegazioni interattive e schemi complessi in HTML, dentro un panel isolato (sandbox, nessun accesso al disco, a Node o alla rete).
+
+Si offre bene come template "Studio" (vedi punto 2): orchestratore, ricerca, slide e tutor già collegati.
+
+Come parla con Claude: la chat avvia la CLI dell'utente in modalità dati, `claude -p --input-format stream-json --output-format stream-json`, con `--resume <session-id>` per la memoria tra le domande. Il processo resta aperto e le risposte arrivano in JSON, da cui l'app costruisce la chat (Markdown, formule, link ai panel). Stesso login, stessi hook e stesso server MCP delle altre sessioni. Senza richieste di permesso interattive, gli strumenti vanno dichiarati con `--allowedTools`: solo quelli di lettura e quello per creare i materiali. Le opzioni ci sono in Claude Code 2.1.312; resta da provare un giro completo con hook e MCP attivi.
+
+Da decidere:
+
+- Il formato delle conversazioni salvate da Claude Code non è documentato e può cambiare: va verificato prima di costruirci sopra, con un ripiego sul solo registro delle attività.
+- Quanto contesto leggere per ogni domanda, per non consumare troppi token su lavagne grandi.
+
 ## Poi
 
 - Pacchetti macOS firmati e notarizzati, così il primo avvio non chiede passaggi in più.
