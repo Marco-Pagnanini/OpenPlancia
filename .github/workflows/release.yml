@@ -16,11 +16,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             script: dist:mac
           - os: windows-latest
             script: dist:win
-          - os: ubuntu-latest
+          # node-pty is compiled here and requires the runner's glibc: an older Ubuntu keeps the
+          # package running on older distros (ubuntu-latest produced a pty.node needing glibc 2.42).
+          - os: ubuntu-22.04
             script: dist:linux
     runs-on: ${{ matrix.os }}
     steps:
